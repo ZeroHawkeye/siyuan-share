@@ -118,7 +118,6 @@ function Home() {
                   <Tag color={health.status === 'ok' ? 'success' : 'error'} style={{ fontSize: 14, padding: '4px 12px' }}>
                     {health.status === 'ok' ? '✓ 正常运行' : '异常'}
                   </Tag>
-                  <Tag color="blue" style={{ fontSize: 14, padding: '4px 12px' }}>用户数: {health.userCount}</Tag>
                   <Tag color="geekblue" style={{ fontSize: 14, padding: '4px 12px' }}>版本: {health.version}</Tag>
                 </Space>
               </div>
@@ -237,7 +236,7 @@ function Home() {
       </div>
 
       <Card className="home-card" bordered={false}>
-        <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} size="large" />
+        <Tabs activeKey={activeTab} onChange={setActiveTab} items={sessionUser ? tabItems.filter(item => item.key === 'status') : tabItems} size="large" />
       </Card>
 
       <Card className="usage-card" bordered={false} style={{ marginTop: 24 }}>

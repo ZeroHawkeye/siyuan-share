@@ -55,6 +55,42 @@
   }
 }
 
+/* 分享列表操作按钮样式 */
+.share-list {
+  &__action-btn {
+    padding: 6px !important;
+    min-width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    
+    svg {
+      margin: 0 !important;
+    }
+    
+    &:hover {
+      background: var(--b3-theme-primary-lightest);
+      border-color: var(--b3-theme-primary);
+      
+      svg {
+        color: var(--b3-theme-primary);
+      }
+    }
+    
+    &--delete:hover {
+      background: rgba(245, 34, 45, 0.1);
+      border-color: var(--b3-theme-error);
+      
+      svg {
+        color: var(--b3-theme-error);
+      }
+    }
+  }
+}
+
 .share-record-list {
   max-height: 240px;
   overflow-y: auto;
@@ -77,5 +113,69 @@
       display: flex;
       gap: 4px;
     }
+  }
+}
+
+/* 资源列表样式 */
+.asset-list {
+  &__body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__loading,
+  &__empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  &__container {
+    flex: 1;
+    overflow-y: auto;
+    
+    /* 滚动条样式 */
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    &::-webkit-scrollbar-track {
+      background: var(--b3-theme-background);
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background: var(--b3-theme-surface-lighter);
+      border-radius: 4px;
+      
+      &:hover {
+        background: var(--b3-theme-on-surface-light);
+      }
+    }
+  }
+
+  &__item {
+    transition: all 0.2s ease;
+    
+    &:hover {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      transform: translateY(-1px);
+    }
+  }
+}
+
+/* 资源预览对话框样式 */
+.asset-preview {
+  &__image {
+    max-width: 100%;
+    max-height: 70vh;
+    border-radius: 4px;
+  }
+
+  &__video,
+  &__audio {
+    max-width: 100%;
+    max-height: 70vh;
   }
 }

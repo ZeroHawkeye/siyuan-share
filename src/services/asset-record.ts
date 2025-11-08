@@ -141,4 +141,90 @@ export class AssetRecordManager {
         }
         return null;
     }
+
+    /**
+     * 从指定文档中删除单个资源
+     * @param docId 文档ID
+     * @param s3Key S3对象键名
+     * @returns 如果找到并删除返回 true，否则返回 false
+     */
+    async removeAssetFromDoc(docId: string, s3Key: string): Promise<boolean> {
+        const mapping = this.mappings.get(docId);
+        if (!mapping) {
+            return false;
+        }
+
+        const originalLength = mapping.assets.length;
+        mapping.assets = mapping.assets.filter(a => a.s3Key !== s3Key);
+        
+        if (mapping.assets.length === originalLength) {
+            return false; // 没有找到该资源
+        }
+
+        mapping.updatedAt = Date.now();
+        
+        // 如果该文档已无资源，删除整个映射
+        if (mapping.assets.length === 0) {
+            this.mappings.delete(docId);
+        }
+
+        await this.save();
+        return true;
+    }
+
+    /**
+     * 批量删除资源（从所有文档中）
+     * @param s3Keys S3对象键名列表
+     * @returns 删除的资源数量
+     */
+    async removeAssets(s3Keys: string[]): Promise<number> {
+        let removedCount = 0;
+        const s3KeySet = new Set(s3Keys);
+
+        for (const [docId, mapping] of this.mappings.entries()) {
+            const originalLength = mapping.assets.length;
+            mapping.assets = mapping.assets.filter(a => !s3KeySet.has(a.s3Key));
+            
+            if (mapping.assets.length < originalLength) {
+                removedCount += originalLength - mapping.assets.length;
+                mapping.updatedAt = Date.now();
+
+                // 如果该文档已无资源，删除整个映射
+                if (mapping.assets.length === 0) {
+                    this.mappings.delete(docId);
+                }
+            }
+        }
+
+        if (removedCount > 0) {
+            await this.save();
+        }
+
+        return removedCount;
+    }
+
+    /**
+     * 根据筛选条件删除资源
+     * @param filter 筛选函数
+     * @returns 删除的资源键名列表
+     */
+    async removeAssetsByFilter(
+        filter: (asset: AssetUploadRecord, docId: string) => boolean
+    ): Promise<string[]> {
+        const toRemove: string[] = [];
+
+        for (const [docId, mapping] of this.mappings.entries()) {
+            for (const asset of mapping.assets) {
+                if (filter(asset, docId)) {
+                    toRemove.push(asset.s3Key);
+                }
+            }
+        }
+
+        if (toRemove.length > 0) {
+            await this.removeAssets(toRemove);
+        }
+
+        return toRemove;
+    }
 }

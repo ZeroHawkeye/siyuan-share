@@ -133,6 +133,49 @@ export class S3UploadService {
     }
 
     /**
+     * 删除 S3 上的单个文件
+     * @param s3Key S3 对象键名
+     */
+    async deleteFile(s3Key: string): Promise<void> {
+        if (!this.config.enabled) {
+            throw new Error("S3 存储未启用");
+        }
+
+        if (!this.validateConfig()) {
+            throw new Error("S3 配置不完整");
+        }
+
+        try {
+            await this.performDelete(s3Key);
+        } catch (error) {
+            console.error(`删除文件失败: ${s3Key}`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 批量删除 S3 上的文件
+     * @param s3Keys S3 对象键名列表
+     * @returns 删除结果 { success: 成功删除的键列表, failed: 失败的键列表 }
+     */
+    async deleteFiles(s3Keys: string[]): Promise<{ success: string[]; failed: string[] }> {
+        const success: string[] = [];
+        const failed: string[] = [];
+
+        for (const s3Key of s3Keys) {
+            try {
+                await this.deleteFile(s3Key);
+                success.push(s3Key);
+            } catch (error) {
+                console.error(`删除文件失败: ${s3Key}`, error);
+                failed.push(s3Key);
+            }
+        }
+
+        return { success, failed };
+    }
+
+    /**
      * 执行实际的 S3 上传
      */
     private async performUpload(
@@ -211,6 +254,53 @@ export class S3UploadService {
             }
 
             xhr.send(file);
+        });
+    }
+
+    /**
+     * 执行实际的 S3 删除
+     */
+    private async performDelete(s3Key: string): Promise<void> {
+        // 构造 S3 URL
+        const endpoint = this.config.endpoint.replace(/^https?:\/\//, '');
+        const bucket = this.config.bucket;
+        const url = `https://${bucket}.${endpoint}/${s3Key}`;
+        
+        // 生成签名和请求头
+        const headers = await this.generateSignedHeaders(
+            'DELETE',
+            s3Key,
+            '',
+            0
+        );
+
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            
+            xhr.addEventListener('load', () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    resolve();
+                } else if (xhr.status === 404) {
+                    // 文件不存在，视为删除成功
+                    resolve();
+                } else {
+                    reject(new Error(`S3 删除失败: HTTP ${xhr.status} - ${xhr.responseText}`));
+                }
+            });
+
+            xhr.addEventListener('error', () => {
+                reject(new Error('网络错误，删除失败'));
+            });
+
+            xhr.open('DELETE', url);
+            
+            for (const key in headers) {
+                if (headers.hasOwnProperty(key)) {
+                    xhr.setRequestHeader(key, headers[key]);
+                }
+            }
+
+            xhr.send();
         });
     }
 

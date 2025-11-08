@@ -21,6 +21,44 @@
   text-align: center;
 }
 
+.share-view-error .ant-result {
+  padding: 48px 32px;
+}
+
+.share-view-error .ant-result-icon {
+  margin-bottom: 24px;
+}
+
+.share-view-error .ant-result-icon > .anticon {
+  font-size: 72px;
+}
+
+.share-view-error .ant-result-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.share-view-error .error-subtitle {
+  font-size: 16px;
+  margin-bottom: 24px;
+}
+
+.share-view-error .ant-result-extra {
+  margin-top: 32px;
+}
+
+.share-view-error .ant-btn {
+  height: 40px;
+  padding: 0 24px;
+  font-size: 16px;
+  border-radius: 6px;
+}
+
+.share-view-error .ant-btn + .ant-btn {
+  margin-left: 12px;
+}
+
 .password-card {
   max-width: 400px;
   width: 100%;
@@ -330,6 +368,39 @@
   .markdown-body pre {
     font-size: 13px;
   }
+
+  /* 移动端错误页面优化 */
+  .share-view-error .ant-result {
+    padding: 32px 16px;
+  }
+
+  .share-view-error .ant-result-icon > .anticon {
+    font-size: 56px;
+  }
+
+  .share-view-error .ant-result-title {
+    font-size: 20px;
+  }
+
+  .share-view-error .error-subtitle {
+    font-size: 14px;
+  }
+
+  .share-view-error .ant-btn {
+    height: 36px;
+    padding: 0 16px;
+    font-size: 14px;
+  }
+
+  .share-view-error .ant-result-extra {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .share-view-error .ant-btn + .ant-btn {
+    margin-left: 0;
+  }
 }
 
 /* 平板适配 */
@@ -396,6 +467,14 @@
   .password-card {
     background: #1f1f1f;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  }
+
+  .share-view-error .ant-result-icon > .anticon {
+    color: rgba(255, 255, 255, 0.65);
+  }
+
+  .share-view-error .ant-result-title {
+    color: rgba(255, 255, 255, 0.85);
   }
 
   .share-header {

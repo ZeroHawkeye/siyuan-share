@@ -168,7 +168,7 @@ export class ShareListDialog {
                         <div class="b3-list-item__text" style="font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${this.escapeHtml(record.docTitle)}">
                             ${this.escapeHtml(record.docTitle)}
                         </div>
-                        <span style="padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; background: ${statusBgColor}; color: ${statusColor}; white-space: nowrap;">
+                        <span style="padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 500; background: ${statusBgColor}; color: ${statusColor}; white-space: nowrap; line-height: 1.4;">
                             ${statusText}
                         </span>
                     </div>
@@ -191,15 +191,15 @@ export class ShareListDialog {
                         </span>
                     </div>
                 </div>
-                <div class="fn__flex" style="gap: 8px; flex-shrink: 0;">
-                    <button class="b3-button b3-button--outline" data-action="open" data-doc-id="${record.docId}" title="${this.plugin.i18n.shareListOpenDoc || "打开文档"}" style="padding: 6px 12px;">
-                        <svg class="b3-button__icon"><use xlink:href="#iconFile"></use></svg>
+                <div class="fn__flex" style="gap: 6px; flex-shrink: 0;">
+                    <button class="b3-button b3-button--outline share-list__action-btn" data-action="open" data-doc-id="${record.docId}" title="${this.plugin.i18n.shareListOpenDoc || "打开文档"}">
+                        <svg style="width: 14px; height: 14px;"><use xlink:href="#iconFile"></use></svg>
                     </button>
-                    <button class="b3-button b3-button--outline" data-action="copy" data-url="${this.escapeHtml(record.shareUrl)}" title="${this.plugin.i18n.copyLink || "复制链接"}" style="padding: 6px 12px;">
-                        <svg class="b3-button__icon"><use xlink:href="#iconCopy"></use></svg>
+                    <button class="b3-button b3-button--outline share-list__action-btn" data-action="copy" data-url="${this.escapeHtml(record.shareUrl)}" title="${this.plugin.i18n.copyLink || "复制链接"}">
+                        <svg style="width: 14px; height: 14px;"><use xlink:href="#iconCopy"></use></svg>
                     </button>
-                    <button class="b3-button b3-button--outline" data-action="delete" data-id="${record.id}" title="${this.plugin.i18n.shareListDelete || "删除"}" style="padding: 6px 12px;">
-                        <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
+                    <button class="b3-button b3-button--outline share-list__action-btn share-list__action-btn--delete" data-action="delete" data-id="${record.id}" title="${this.plugin.i18n.shareListDelete || "删除"}">
+                        <svg style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                     </button>
                 </div>
             </div>

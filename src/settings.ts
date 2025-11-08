@@ -1,4 +1,5 @@
 import { Setting } from "siyuan";
+import { AssetListView } from "./components/asset-list-view";
 import { ShareListDialog } from "./components/share-list";
 import type SharePlugin from "./index";
 import type { S3Config } from "./types";
@@ -292,6 +293,25 @@ export class ShareSettings {
             title: this.plugin.i18n.shareListTitle || "全部分享",
             description: this.plugin.i18n.shareListViewDesc || "查看和管理所有已创建的分享链接",
             createActionElement: () => viewSharesButton,
+        });
+
+        // 查看静态资源按钮
+        const viewAssetsButton = document.createElement("button");
+        viewAssetsButton.className = "b3-button b3-button--outline fn__block";
+        viewAssetsButton.innerHTML = `
+            <svg class="b3-button__icon"><use xlink:href="#iconImage"></use></svg>
+            ${this.plugin.i18n.assetListTitle || "静态资源管理"}
+        `;
+        viewAssetsButton.addEventListener("click", async () => {
+            // 弹出资源列表对话框
+            const assetListView = new AssetListView(this.plugin);
+            await assetListView.show();
+        });
+
+        setting.addItem({
+            title: this.plugin.i18n.assetListTitle || "静态资源管理",
+            description: this.plugin.i18n.assetListViewDesc || "查看和管理已上传到 S3 的静态资源文件",
+            createActionElement: () => viewAssetsButton,
         });
     }
 

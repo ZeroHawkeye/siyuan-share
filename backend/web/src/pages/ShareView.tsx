@@ -1,5 +1,5 @@
-import { EyeOutlined, UpOutlined } from '@ant-design/icons'
-import { Anchor, Button, Drawer, Image, Input, Layout, message, Spin, Typography } from 'antd'
+import { ExclamationCircleOutlined, EyeOutlined, FileSearchOutlined, HomeOutlined, UpOutlined } from '@ant-design/icons'
+import { Anchor, Button, Drawer, Image, Input, Layout, message, Result, Spin, Typography } from 'antd'
 import 'github-markdown-css/github-markdown-light.css'
 import 'highlight.js/styles/github.css'
 import { useEffect, useRef, useState } from 'react'
@@ -269,10 +269,42 @@ function ShareView() {
   }
 
   if (error) {
+    const isNotFound = error.toLowerCase().includes('not found') || error.includes('不存在')
+    
     return (
       <div className="share-view-error">
-        <Title level={3}>加载失败</Title>
-        <Text type="danger">{error}</Text>
+        <Result
+          icon={isNotFound ? <FileSearchOutlined /> : <ExclamationCircleOutlined />}
+          status={isNotFound ? '404' : 'error'}
+          title={isNotFound ? '分享不存在' : '加载失败'}
+          subTitle={
+            <div className="error-subtitle">
+              <Text type="secondary">
+                {isNotFound 
+                  ? '抱歉，您访问的分享链接不存在或已过期' 
+                  : error}
+              </Text>
+            </div>
+          }
+          extra={[
+            <Button 
+              type="primary" 
+              icon={<HomeOutlined />}
+              onClick={() => window.location.href = '/'}
+              key="home"
+            >
+              返回首页
+            </Button>,
+            !isNotFound && (
+              <Button 
+                key="retry"
+                onClick={() => loadShare()}
+              >
+                重试
+              </Button>
+            )
+          ].filter(Boolean)}
+        />
       </div>
     )
   }
@@ -280,7 +312,28 @@ function ShareView() {
   if (!share) {
     return (
       <div className="share-view-error">
-        <Title level={3}>分享不存在</Title>
+        <Result
+          icon={<FileSearchOutlined />}
+          status="404"
+          title="分享不存在"
+          subTitle={
+            <div className="error-subtitle">
+              <Text type="secondary">
+                抱歉，您访问的分享链接不存在或已过期
+              </Text>
+            </div>
+          }
+          extra={[
+            <Button 
+              type="primary" 
+              icon={<HomeOutlined />}
+              onClick={() => window.location.href = '/'}
+              key="home"
+            >
+              返回首页
+            </Button>
+          ]}
+        />
       </div>
     )
   }
