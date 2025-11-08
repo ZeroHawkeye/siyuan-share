@@ -3,6 +3,9 @@ import type { BatchDeleteShareResponse, ShareOptions, ShareRecord, ShareResponse
 
 export class ShareService {
     private plugin: SharePlugin;
+    // 导出内容缓存：会话级，避免短时间重复导出同一文档
+    private contentCache = new Map<string, { content: string; ts: number }>();
+    private contentPromiseCache = new Map<string, Promise<string | null>>();
 
     constructor(plugin: SharePlugin) {
         this.plugin = plugin;
@@ -76,10 +79,21 @@ export class ShareService {
      * 导出文档内容
      */
     private async exportDocContent(docId: string): Promise<string | null> {
+        // 短期缓存命中（60s）
+        const cached = this.contentCache.get(docId);
+        if (cached && Date.now() - cached.ts < 60_000) {
+            return cached.content;
+        }
+        const inflight = this.contentPromiseCache.get(docId);
+        if (inflight) return inflight;
+
+        const p = (async (): Promise<string | null> => {
         const config = this.plugin.settings.getConfig();
         
         try {
             // 使用思源内核 Token 调用内部 API
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 20_000);
             const response = await fetch("/api/export/exportMdContent", {
                 method: "POST",
                 headers: {
@@ -87,6 +101,7 @@ export class ShareService {
                     "Authorization": `Token ${config.siyuanToken}`,
                 },
                 body: JSON.stringify({ id: docId }),
+                signal: controller.signal,
             });
 
             if (!response.ok) {
@@ -97,14 +112,22 @@ export class ShareService {
             const result = await response.json();
             if (result.code === 0 && result.data && result.data.content) {
                 // 清理内容中的元数据
-                return this.cleanMarkdownContent(result.data.content);
+                const cleaned = this.cleanMarkdownContent(result.data.content);
+                this.contentCache.set(docId, { content: cleaned, ts: Date.now() });
+                return cleaned;
             }
             
             return null;
         } catch (error) {
             console.error("Export document failed:", error);
             return null;
+        } finally {
+            this.contentPromiseCache.delete(docId);
         }
+        })();
+
+        this.contentPromiseCache.set(docId, p);
+        return p;
     }
 
     /**

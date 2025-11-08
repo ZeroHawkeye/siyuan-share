@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios from 'axios';
 
 // 生产环境使用相对路径，开发环境使用环境变量指定的完整URL
 const api = axios.create({
@@ -9,6 +9,14 @@ const api = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
+    // 自动附加会话令牌（用于仪表盘/API管理）
+    try {
+      const token = localStorage.getItem('session_token')
+      if (token) {
+        config.headers = config.headers || {}
+        ;(config.headers as any)['Authorization'] = `Bearer ${token}`
+      }
+    } catch {}
     return config
   },
   (error) => {

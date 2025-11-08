@@ -1,17 +1,54 @@
-.home { max-width: 760px; margin: 40px auto; padding: 0 16px; }
-.error { color: #c00; }
-.health-box, .bootstrap-box, .usage-box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-top: 16px; }
-.bootstrap-box form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-.bootstrap-box input { flex: 1 1 220px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; }
-.bootstrap-box button { padding: 8px 12px; border: none; background: #111827; color: #fff; border-radius: 6px; cursor: pointer; }
-.bootstrap-box button[disabled] { opacity: 0.6; cursor: not-allowed; }
-.msg { margin-top: 8px; }
+/* Apple 风格现代化 UI */
+.home-container {
+  max-width: 680px;
+  margin: 60px auto;
+  padding: 0 24px;
+}
 
-/* API Token 展示区域 */
-.token-result { margin-top: 20px; padding: 16px; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px; }
-.token-result h3 { margin: 0 0 12px 0; color: #166534; font-size: 16px; }
-.token-box { display: flex; gap: 8px; align-items: center; background: #fff; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; }
-.token-box code { flex: 1; font-family: 'Courier New', monospace; font-size: 13px; word-break: break-all; color: #111827; }
-.copy-btn { padding: 6px 12px; border: none; background: #22c55e; color: #fff; border-radius: 4px; cursor: pointer; white-space: nowrap; font-size: 14px; }
-.copy-btn:hover { background: #16a34a; }
-.token-tip { margin: 8px 0 0 0; font-size: 13px; color: #166534; }
+.home-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.home-card {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.04), 0 1px 4px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+}
+
+.home-card .ant-card-body {
+  padding: 32px;
+}
+
+.usage-card {
+  background: #f9fafb;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.usage-card .ant-card-body {
+  padding: 24px;
+}
+
+/* Ant Design Tabs 优化 */
+.home-card .ant-tabs-nav {
+  margin-bottom: 0;
+}
+
+.home-card .ant-tabs-tab {
+  font-weight: 500;
+  font-size: 15px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .home-container {
+    margin: 32px auto;
+    padding: 0 16px;
+  }
+  
+  .home-card .ant-card-body {
+    padding: 20px;
+  }
+}

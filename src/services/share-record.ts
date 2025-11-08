@@ -4,8 +4,9 @@ import type { ShareRecord } from "../types";
 export class ShareRecordManager {
     private plugin: SharePlugin;
     private records: ShareRecord[] = [];
-    private syncInterval: number = 5 * 60 * 1000; // 5分钟同步一次
+    private syncInterval: number = 5 * 60 * 1000; // 基准 5 分钟
     private syncTimer: number | null = null;
+    private syncing = false;
 
     constructor(plugin: SharePlugin) {
         this.plugin = plugin;
@@ -29,6 +30,8 @@ export class ShareRecordManager {
      * 从后端同步分享记录
      */
     async syncFromBackend(): Promise<void> {
+        if (this.syncing) return; // 并发去重
+        this.syncing = true;
         const config = this.plugin.settings.getConfig();
 
         // 如果未配置，跳过同步
@@ -47,6 +50,8 @@ export class ShareRecordManager {
         } catch (error) {
             console.error("Sync from backend failed:", error);
             // 同步失败不影响使用本地缓存
+        } finally {
+            this.syncing = false;
         }
     }
 
@@ -129,12 +134,23 @@ export class ShareRecordManager {
         if (this.syncTimer) {
             return;
         }
+        // 根据前端环境动态调整间隔（移动端更长，并加入抖动避免雪崩）
+        const isMobile = (this.plugin as any).isMobile === true;
+        const base = isMobile ? this.syncInterval * 3 : this.syncInterval;
+        const jitter = Math.floor(Math.random() * 30_000); // ±30s 抖动
+        const interval = base + jitter;
+
+        // 首次延迟执行，避免与启动阶段其他请求竞争
+        const startDelay = 3_000 + Math.floor(Math.random() * 2_000);
+        setTimeout(() => {
+            this.syncFromBackend().catch(err => console.error("Auto sync (initial) failed:", err));
+        }, startDelay);
 
         this.syncTimer = setInterval(() => {
             this.syncFromBackend().catch(err => {
                 console.error("Auto sync failed:", err);
             });
-        }, this.syncInterval);
+        }, interval);
     }
 
     /**
@@ -163,7 +179,9 @@ export class ShareRecordManager {
             // 分页拉取，直到全部获取或超过安全上限（例如 1000 条）
             const all: ShareRecord[] = [];
             let page = 1;
-            const size = 50;
+            const size = 100; // 按后端限制的最大值请求，减少往返
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15_000);
             while (true) {
                 const resp = await fetch(`${base}/api/share/list?page=${page}&size=${size}`, {
                     method: "GET",
@@ -171,6 +189,7 @@ export class ShareRecordManager {
                         "Authorization": `Bearer ${apiToken}`,
                         "X-Base-URL": base,
                     },
+                    signal: controller.signal,
                 });
                 if (!resp.ok) {
                     throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
@@ -200,6 +219,7 @@ export class ShareRecordManager {
                 }
                 page++;
             }
+            clearTimeout(timeout);
             return all;
         } catch (error: any) {
             throw new Error("Network request failed: " + (error?.message || String(error)));

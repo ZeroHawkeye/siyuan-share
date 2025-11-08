@@ -4,7 +4,6 @@ import (
 	"embed"
 	"log"
 	"os"
-	"time"
 
 	"github.com/ZeroHawkeye/siyuan-share-api/models"
 	"github.com/ZeroHawkeye/siyuan-share-api/routes"
@@ -20,12 +19,7 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
-	// 如果没有用户则生成一次性引导令牌（写文件便于管理员查看）
-	if bt, err := models.EnsureBootstrapToken(); err != nil {
-		log.Printf("Failed to ensure bootstrap token: %v", err)
-	} else if bt != nil {
-		log.Printf("Bootstrap token available (expires %s)", bt.ExpiresAt.Format(time.RFC3339))
-	}
+	// 移除引导令牌流程：用户通过注册与个人中心管理 Token
 
 	// 设置 Gin 模式
 	if os.Getenv("GIN_MODE") == "" {

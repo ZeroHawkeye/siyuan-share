@@ -190,36 +190,57 @@ export class ShareSettings {
         const results: string[] = [];
         let hasError = false;
 
-        // 1. 测试后端 API Token
+        // 1. 测试后端 API Token（优先使用需要认证的 /api/auth/health，若不存在再回退公开 /api/health）
         if (!config.serverUrl || !config.apiToken) {
             results.push("❌ " + this.plugin.i18n.testBackendFailed + ": 配置缺失");
             hasError = true;
         } else {
-            try {
-                const base = config.serverUrl.replace(/\/$/, "");
-                const response = await fetch(`${base}/api/health`, {
+            const base = config.serverUrl.replace(/\/$/, "");
+            const authHealth = `${base}/api/auth/health`;
+            const publicHealth = `${base}/api/health`;
+
+            const fetchWithToken = async (url: string) => {
+                return fetch(url, {
                     method: "GET",
-                    headers: {
-                        "Authorization": `Bearer ${config.apiToken}`,
-                    },
+                    headers: { "Authorization": `Bearer ${config.apiToken}` },
                 });
+            };
+
+            try {
+                let response = await fetchWithToken(authHealth);
+                let usedAuthEndpoint = true;
+
+                // 回退：404 或 405 说明旧版本后端可能没有 /auth/health
+                if (response.status === 404 || response.status === 405) {
+                    usedAuthEndpoint = false;
+                    response = await fetchWithToken(publicHealth);
+                }
 
                 if (response.status === 401 || response.status === 403) {
-                    // 明确的认证失败
                     results.push("❌ " + this.plugin.i18n.testBackendFailed + ": Token 无效或未授权");
                     hasError = true;
                 } else if (!response.ok) {
-                    // 其他错误
                     const errorText = await response.text().catch(() => response.statusText);
                     results.push(`❌ ${this.plugin.i18n.testBackendFailed}: HTTP ${response.status} - ${errorText}`);
                     hasError = true;
                 } else {
-                    // 验证响应格式
-                    const result = await response.json();
-                    if (result.code === 0 && result.data) {
-                        results.push("✅ " + this.plugin.i18n.testBackendSuccess + ` (用户: ${result.data.userID})`);
+                    // 解析 JSON
+                    let json: any = null;
+                    try { json = await response.json(); } catch { json = {}; }
+
+                    if (usedAuthEndpoint) {
+                        // 认证端点必须返回 code===0 才视为成功
+                        if (json && json.code === 0) {
+                            const userID = json?.data?.userID || "unknown";
+                            results.push(`✅ ${this.plugin.i18n.testBackendSuccess} (用户: ${userID})`);
+                        } else {
+                            results.push(`❌ ${this.plugin.i18n.testBackendFailed}: 返回格式异常或 code!=0`);
+                            hasError = true;
+                        }
                     } else {
-                        results.push("✅ " + this.plugin.i18n.testBackendSuccess);
+                        // 公开端点无法验证 Token，只提示回退结果
+                        results.push(`⚠️ ${this.plugin.i18n.testBackendFailed}: 后端缺少 /api/auth/health，已回退公开健康检查，无法校验 Token 有效性`);
+                        hasError = true; // 标记为失败避免误判
                     }
                 }
             } catch (error: any) {

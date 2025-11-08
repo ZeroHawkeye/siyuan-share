@@ -13,19 +13,27 @@ import (
 	"github.com/ZeroHawkeye/siyuan-share-api/controllers"
 	"github.com/ZeroHawkeye/siyuan-share-api/middleware"
 	"github.com/ZeroHawkeye/siyuan-share-api/models"
+	gz "github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 )
 
 // SetupRouter 设置路由
 func SetupRouter(staticFiles *embed.FS) *gin.Engine {
-	r := gin.Default()
+	// 自定义 Engine 以便关闭不必要的中间件或切换 JSON 序列化库
+	r := gin.New()
+	r.Use(gin.Recovery())
+	// 仅在开发时启用默认 Logger，生产可通过 GIN_MODE=release 禁用
+	if gin.Mode() != gin.ReleaseMode {
+		r.Use(gin.Logger())
+	}
 
 	// 禁用自动重定向，避免根路径触发 301
 	r.RedirectTrailingSlash = false
 	r.RedirectFixedPath = false
 
-	// 使用 CORS 中间件
+	// 使用 CORS 中间件 & 响应压缩
 	r.Use(middleware.CORSMiddleware())
+	r.Use(gz.Gzip(gz.BestSpeed))
 	// 静态文件服务（前端）
 	if staticFiles != nil {
 		// 获取嵌入的 dist 子文件系统
@@ -112,8 +120,9 @@ func SetupRouter(staticFiles *embed.FS) *gin.Engine {
 			})
 		})
 
-		// 引导端点（无需认证）
-		api.POST("/bootstrap", controllers.Bootstrap)
+		// 注册与登录（无需认证）
+		api.POST("/auth/register", controllers.Register)
+		api.POST("/auth/login", controllers.Login)
 
 		// 健康检查（需要认证，用于测试 API Token）
 		api.GET("/auth/health", middleware.AuthMiddleware(), func(c *gin.Context) {
@@ -143,6 +152,16 @@ func SetupRouter(staticFiles *embed.FS) *gin.Engine {
 		user.Use(middleware.AuthMiddleware())
 		{
 			user.GET("/me", controllers.Me)
+		}
+
+		// Token 管理端点（需要认证）
+		token := api.Group("/token")
+		token.Use(middleware.AuthMiddleware())
+		{
+			token.GET("/list", controllers.ListTokens)
+			token.POST("/create", controllers.CreateToken)
+			token.POST("/refresh/:id", controllers.RefreshToken)
+			token.POST("/revoke/:id", controllers.RevokeToken)
 		}
 
 		// 公开访问的分享查看接口

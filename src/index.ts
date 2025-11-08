@@ -17,6 +17,17 @@ export default class SharePlugin extends Plugin {
     public settings: ShareSettings;
     public shareService: ShareService;
     public shareRecordManager: ShareRecordManager;
+    private lastActiveRootId?: string;
+    // 文档标题缓存（带过期）
+    private docTitleCache = new Map<string, { title: string; expires: number }>();
+    private docTitlePromiseCache = new Map<string, Promise<string>>();
+    private readonly DOC_TITLE_TTL = 5 * 60 * 1000; // 5 分钟
+
+    // 事件处理器引用，便于卸载时移除监听避免泄漏
+    private handleSwitchProtyle?: (evt: any) => void;
+    private handleLoadedProtyleStatic?: (evt: any) => void;
+    private handleLoadedProtyleDynamic?: (evt: any) => void;
+    private handleOpenMenuDocTree?: (evt: any) => void;
 
 
 
@@ -40,8 +51,40 @@ export default class SharePlugin extends Plugin {
         // 设置面板
         this.setting = this.settings.createSettingPanel();
 
+        // 尝试从当前活动窗口初始化最近激活的文档 ID
+        this.initLastActiveFromDOM();
+
+        // 监听编辑器切换，记录最近激活的文档 ID
+        this.handleSwitchProtyle = (evt: any) => {
+            try {
+                const rid = evt?.detail?.protyle?.block?.rootID;
+                if (typeof rid === 'string' && rid) {
+                    this.lastActiveRootId = rid;
+                }
+            } catch (_) { /* ignore */ }
+        };
+        this.eventBus.on("switch-protyle", this.handleSwitchProtyle);
+
+        // 监听编辑器加载事件，尽量保持 lastActiveRootId 为活动窗口中的编辑器
+        const updateOnLoad = (evt: any) => {
+            try {
+                const protyleEl = evt?.detail?.protyle?.element as HTMLElement | undefined;
+                const rid = evt?.detail?.protyle?.block?.rootID as string | undefined;
+                if (protyleEl && rid) {
+                    const activeWnd = document.querySelector('.layout__wnd--active') as HTMLElement | null;
+                    if (activeWnd && activeWnd.contains(protyleEl)) {
+                        this.lastActiveRootId = rid;
+                    }
+                }
+            } catch (_) { /* ignore */ }
+        };
+        this.handleLoadedProtyleStatic = updateOnLoad;
+        this.handleLoadedProtyleDynamic = updateOnLoad;
+        this.eventBus.on("loaded-protyle-static", this.handleLoadedProtyleStatic);
+        this.eventBus.on("loaded-protyle-dynamic", this.handleLoadedProtyleDynamic);
+
         // 监听文档树菜单添加分享入口
-        this.eventBus.on("open-menu-doctree", (evt: any) => {
+        this.handleOpenMenuDocTree = (evt: any) => {
             const { detail } = evt;
             if (!detail || !detail.menu || !detail.doc) return;
             const docId = detail.doc.id;
@@ -50,17 +93,19 @@ export default class SharePlugin extends Plugin {
             detail.menu.addItem({
                 icon: "iconShare",
                 label: this.i18n.shareMenuShareDoc || "Share Document",
-                click: () => {
+                click: async () => {
                     if (!this.settings.isConfigured()) {
                         showMessage(this.i18n.shareErrorNotConfigured, 4000, "error");
                         openSetting(this.app);
                         return;
                     }
-                    const dialog = new ShareDialog(this, docId, docTitle);
+                    const realTitle = await this.getDocTitle(docId);
+                    const dialog = new ShareDialog(this, docId, realTitle || docTitle);
                     dialog.show();
                 }
             });
-        });
+        };
+        this.eventBus.on("open-menu-doctree", this.handleOpenMenuDocTree);
     }
 
     onLayoutReady() {
@@ -93,6 +138,11 @@ export default class SharePlugin extends Plugin {
         if (this.shareRecordManager) {
             this.shareRecordManager.stopAutoSync();
         }
+        // 移除事件监听
+        if (this.handleSwitchProtyle) this.eventBus.off("switch-protyle", this.handleSwitchProtyle);
+        if (this.handleLoadedProtyleStatic) this.eventBus.off("loaded-protyle-static", this.handleLoadedProtyleStatic);
+        if (this.handleLoadedProtyleDynamic) this.eventBus.off("loaded-protyle-dynamic", this.handleLoadedProtyleDynamic);
+        if (this.handleOpenMenuDocTree) this.eventBus.off("open-menu-doctree", this.handleOpenMenuDocTree);
     }
 
     uninstall() {
@@ -112,69 +162,155 @@ export default class SharePlugin extends Plugin {
             showMessage("please open doc first");
             return;
         }
+
+        // 0) 首选使用最近激活的 rootID（点击顶栏按钮会丢失焦点/选区时更可靠）
+        if (this.lastActiveRootId) {
+            const byLast = editors.find((e: any) => e?.protyle?.block?.rootID === this.lastActiveRootId);
+            if (byLast) return byLast;
+        }
+
+        // 1) 根据当前焦点元素定位所在的编辑器
+        const activeEl = (document.activeElement as HTMLElement | null);
+        if (activeEl) {
+            const foundByActive = editors.find((e: any) => e?.protyle?.element && (e.protyle.element as HTMLElement).contains(activeEl));
+            if (foundByActive) return foundByActive;
+        }
+
+        // 2) 尝试根据当前选区定位所在的编辑器
+        const sel = window.getSelection && window.getSelection();
+        const anchorNode = sel && sel.anchorNode as Node | null;
+        if (anchorNode) {
+            const anchorEl = (anchorNode instanceof Element ? anchorNode : anchorNode.parentElement) as HTMLElement | null;
+            if (anchorEl) {
+                const protyleRoot = anchorEl.closest?.('.protyle') as HTMLElement | null;
+                if (protyleRoot) {
+                    const foundBySelection = editors.find((e: any) => e?.protyle?.element === protyleRoot || (e?.protyle?.element as HTMLElement)?.contains(protyleRoot));
+                    if (foundBySelection) return foundBySelection;
+                }
+            }
+        }
+
+        // 2.5) 活动窗口内的编辑器（Siyuan 活动窗口类名）
+        const activeWnd = document.querySelector('.layout__wnd--active') as HTMLElement | null;
+        if (activeWnd) {
+            const foundInActiveWnd = editors.find((e: any) => activeWnd.contains(e?.protyle?.element as HTMLElement));
+            if (foundInActiveWnd) return foundInActiveWnd;
+        }
+
+        // 3) 回退：寻找具有“聚焦”样式的编辑器（类名可能随版本变化）
+        const focusClassCandidates = [
+            'protyle--focus',
+            'protyle-focus',
+        ];
+        const foundByClass = editors.find((e: any) => {
+            const el = e?.protyle?.element as HTMLElement | null;
+            return !!(el && focusClassCandidates.some(c => el.classList?.contains(c)));
+        });
+        if (foundByClass) return foundByClass;
+
+        // 4) 最终回退：返回第一个编辑器
         return editors[0];
+    }
+
+    /**
+     * 从当前 DOM 推断活动窗口的编辑器，初始化 lastActiveRootId
+     */
+    private initLastActiveFromDOM() {
+        try {
+            const editors = getAllEditor();
+            if (!editors.length) return;
+
+            const activeWnd = document.querySelector('.layout__wnd--active') as HTMLElement | null;
+            if (activeWnd) {
+                const foundInActiveWnd = editors.find((e: any) => activeWnd.contains(e?.protyle?.element as HTMLElement));
+                if (foundInActiveWnd?.protyle?.block?.rootID) {
+                    this.lastActiveRootId = foundInActiveWnd.protyle.block.rootID;
+                    return;
+                }
+            }
+
+            const focusClassCandidates = ['protyle--focus','protyle-focus'];
+            const foundByClass = editors.find((e: any) => {
+                const el = e?.protyle?.element as HTMLElement | null;
+                return !!(el && focusClassCandidates.some(c => el.classList?.contains(c)));
+            });
+            if (foundByClass?.protyle?.block?.rootID) {
+                this.lastActiveRootId = foundByClass.protyle.block.rootID;
+                return;
+            }
+
+            // 兜底：若只有一个编辑器，使用它
+            if (editors.length === 1 && editors[0]?.protyle?.block?.rootID) {
+                this.lastActiveRootId = editors[0].protyle.block.rootID;
+            }
+        } catch (_) {
+            // ignore
+        }
     }
 
     /**
      * 获取文档标题
      */
     private async getDocTitle(docId: string): Promise<string> {
-        try {
-            const config = this.settings.getConfig();
-            const response = await fetch("/api/attr/getBlockAttrs", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Token ${config.siyuanToken}`,
-                },
-                body: JSON.stringify({ id: docId }),
-            });
+        // 1. 内存缓存命中
+        const cached = this.docTitleCache.get(docId);
+        if (cached && cached.expires > Date.now()) {
+            return cached.title;
+        }
 
-            if (!response.ok) {
-                console.warn("Failed to get document title:", response.status);
-                return docId;
-            }
+        // 2. 并发去重：已有进行中的请求直接复用
+        const inflight = this.docTitlePromiseCache.get(docId);
+        if (inflight) return inflight;
 
-            const result = await response.json();
-            if (result.code === 0 && result.data) {
-                // 尝试从属性中获取标题
-                const title = result.data.title || result.data.name;
-                if (title) {
-                    return title;
+        const p = (async () => {
+            let title: string | undefined;
+            // 主请求：attr API
+            try {
+                const config = this.settings.getConfig();
+                const response = await fetch("/api/attr/getBlockAttrs", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Token ${config.siyuanToken}`,
+                    },
+                    body: JSON.stringify({ id: docId }),
+                });
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.code === 0 && result.data) {
+                        title = result.data.title || result.data.name;
+                    }
                 }
+            } catch (e) { /* ignore */ }
+
+            // 失败降级：SQL 查询
+            if (!title) {
+                try {
+                    const config = this.settings.getConfig();
+                    const response = await fetch("/api/query/sql", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Token ${config.siyuanToken}`,
+                        },
+                        body: JSON.stringify({ stmt: `SELECT content FROM blocks WHERE id = '${docId}' AND type = 'd' LIMIT 1` }),
+                    });
+                    if (response.ok) {
+                        const result = await response.json();
+                        if (result.code === 0 && result.data && result.data.length > 0) {
+                            title = result.data[0].content;
+                        }
+                    }
+                } catch (e) { /* ignore */ }
             }
-        } catch (error) {
-            console.error("Error fetching document title:", error);
-        }
 
-        // 降级：如果无法获取标题，使用 SQL 查询
-        try {
-            const config = this.settings.getConfig();
-            const response = await fetch("/api/query/sql", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Token ${config.siyuanToken}`,
-                },
-                body: JSON.stringify({ 
-                    stmt: `SELECT content FROM blocks WHERE id = '${docId}' AND type = 'd' LIMIT 1`
-                }),
-            });
+            const finalTitle = title || docId;
+            this.docTitleCache.set(docId, { title: finalTitle, expires: Date.now() + this.DOC_TITLE_TTL });
+            this.docTitlePromiseCache.delete(docId);
+            return finalTitle;
+        })();
 
-            if (!response.ok) {
-                console.warn("Failed to query document title:", response.status);
-                return docId;
-            }
-
-            const result = await response.json();
-            if (result.code === 0 && result.data && result.data.length > 0) {
-                return result.data[0].content || docId;
-            }
-        } catch (error) {
-            console.error("Error querying document title:", error);
-        }
-
-        // 最终降级：返回文档ID
-        return docId;
+        this.docTitlePromiseCache.set(docId, p);
+        return p;
     }
 }

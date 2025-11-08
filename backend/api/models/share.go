@@ -9,9 +9,10 @@ import (
 
 // Share 分享记录模型
 type Share struct {
-	ID              string         `gorm:"primaryKey;size:64" json:"id"`
-	UserID          string         `gorm:"size:64;index" json:"userId"`
-	DocID           string         `gorm:"size:64;index" json:"docId"`
+	ID string `gorm:"primaryKey;size:64" json:"id"`
+	// 组合索引加速 user+doc 查询与分页，并支持按创建时间排序
+	UserID          string         `gorm:"size:64;index:idx_user_doc,priority:1;index:idx_user_created,priority:1" json:"userId"`
+	DocID           string         `gorm:"size:64;index:idx_user_doc,priority:2" json:"docId"`
 	DocTitle        string         `gorm:"size:255" json:"docTitle"`
 	Content         string         `gorm:"type:text" json:"content"`
 	RequirePassword bool           `gorm:"default:false" json:"requirePassword"`
@@ -19,7 +20,7 @@ type Share struct {
 	ExpireAt        time.Time      `gorm:"index" json:"expireAt"`
 	IsPublic        bool           `gorm:"default:true" json:"isPublic"`
 	ViewCount       int            `gorm:"default:0" json:"viewCount"`
-	CreatedAt       time.Time      `json:"createdAt"`
+	CreatedAt       time.Time      `gorm:"index:idx_user_created,priority:2" json:"createdAt"`
 	UpdatedAt       time.Time      `json:"updatedAt"`
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 }
