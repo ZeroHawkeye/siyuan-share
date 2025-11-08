@@ -7,6 +7,7 @@ import {
 } from "siyuan";
 import { ShareDialog } from "./components/share-dialog";
 import "./index.scss";
+import { AssetRecordManager } from "./services/asset-record";
 import { ShareRecordManager } from "./services/share-record";
 import { ShareService } from "./services/share-service";
 import { ShareSettings } from "./settings";
@@ -17,6 +18,7 @@ export default class SharePlugin extends Plugin {
     public settings: ShareSettings;
     public shareService: ShareService;
     public shareRecordManager: ShareRecordManager;
+    public assetRecordManager: AssetRecordManager;
     private lastActiveRootId?: string;
     // 文档标题缓存（带过期）
     private docTitleCache = new Map<string, { title: string; expires: number }>();
@@ -46,6 +48,8 @@ export default class SharePlugin extends Plugin {
         this.shareRecordManager = new ShareRecordManager(this);
         await this.shareRecordManager.load();
         this.shareRecordManager.startAutoSync();
+        this.assetRecordManager = new AssetRecordManager(this);
+        await this.assetRecordManager.load();
         this.shareService = new ShareService(this);
 
         // 设置面板

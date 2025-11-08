@@ -1,6 +1,7 @@
 import { Setting } from "siyuan";
 import { ShareListDialog } from "./components/share-list";
 import type SharePlugin from "./index";
+import type { S3Config } from "./types";
 
 export interface ShareConfig {
     serverUrl: string;
@@ -9,6 +10,7 @@ export interface ShareConfig {
     defaultPassword: boolean;
     defaultExpireDays: number;
     defaultPublic: boolean;
+    s3: S3Config;
 }
 
 export const DEFAULT_CONFIG: ShareConfig = {
@@ -18,6 +20,16 @@ export const DEFAULT_CONFIG: ShareConfig = {
     defaultPassword: false,
     defaultExpireDays: 7,
     defaultPublic: true,
+    s3: {
+        enabled: false,
+        endpoint: "",
+        region: "",
+        bucket: "",
+        accessKeyId: "",
+        secretAccessKey: "",
+        customDomain: "",
+        pathPrefix: "siyuan-share",
+    },
 };
 
 export class ShareSettings {
@@ -84,6 +96,49 @@ export class ShareSettings {
         defaultPublicCheckbox.className = "b3-switch fn__flex-center";
         defaultPublicCheckbox.checked = this.config.defaultPublic;
 
+        // S3 配置输入元素
+        const s3EnabledCheckbox = document.createElement("input");
+        s3EnabledCheckbox.type = "checkbox";
+        s3EnabledCheckbox.className = "b3-switch fn__flex-center";
+        s3EnabledCheckbox.checked = this.config.s3.enabled;
+
+        const s3EndpointInput = document.createElement("input");
+        s3EndpointInput.className = "b3-text-field fn__block";
+        s3EndpointInput.placeholder = "s3.amazonaws.com";
+        s3EndpointInput.value = this.config.s3.endpoint;
+
+        const s3RegionInput = document.createElement("input");
+        s3RegionInput.className = "b3-text-field fn__block";
+        s3RegionInput.placeholder = "us-east-1";
+        s3RegionInput.value = this.config.s3.region;
+
+        const s3BucketInput = document.createElement("input");
+        s3BucketInput.className = "b3-text-field fn__block";
+        s3BucketInput.placeholder = "my-bucket";
+        s3BucketInput.value = this.config.s3.bucket;
+
+        const s3AccessKeyInput = document.createElement("input");
+        s3AccessKeyInput.className = "b3-text-field fn__block";
+        s3AccessKeyInput.type = "password";
+        s3AccessKeyInput.placeholder = "Access Key ID";
+        s3AccessKeyInput.value = this.config.s3.accessKeyId;
+
+        const s3SecretKeyInput = document.createElement("input");
+        s3SecretKeyInput.className = "b3-text-field fn__block";
+        s3SecretKeyInput.type = "password";
+        s3SecretKeyInput.placeholder = "Secret Access Key";
+        s3SecretKeyInput.value = this.config.s3.secretAccessKey;
+
+        const s3CustomDomainInput = document.createElement("input");
+        s3CustomDomainInput.className = "b3-text-field fn__block";
+        s3CustomDomainInput.placeholder = "https://cdn.example.com";
+        s3CustomDomainInput.value = this.config.s3.customDomain || "";
+
+        const s3PathPrefixInput = document.createElement("input");
+        s3PathPrefixInput.className = "b3-text-field fn__block";
+        s3PathPrefixInput.placeholder = "siyuan-share";
+        s3PathPrefixInput.value = this.config.s3.pathPrefix || "";
+
         const setting = new Setting({
             confirmCallback: async () => {
                 // 保存配置
@@ -93,12 +148,24 @@ export class ShareSettings {
                 this.config.defaultPassword = defaultPasswordCheckbox.checked;
                 this.config.defaultExpireDays = parseInt(defaultExpireInput.value) || 7;
                 this.config.defaultPublic = defaultPublicCheckbox.checked;
+                
+                // 保存 S3 配置
+                this.config.s3.enabled = s3EnabledCheckbox.checked;
+                this.config.s3.endpoint = s3EndpointInput.value.trim();
+                this.config.s3.region = s3RegionInput.value.trim();
+                this.config.s3.bucket = s3BucketInput.value.trim();
+                this.config.s3.accessKeyId = s3AccessKeyInput.value.trim();
+                this.config.s3.secretAccessKey = s3SecretKeyInput.value.trim();
+                this.config.s3.customDomain = s3CustomDomainInput.value.trim();
+                this.config.s3.pathPrefix = s3PathPrefixInput.value.trim();
+                
                 await this.save();
             }
         });
 
         // 添加侧边菜单
         this.addGeneralTab(setting, serverUrlInput, apiTokenInput, siyuanTokenInput, defaultPasswordCheckbox, defaultExpireInput, defaultPublicCheckbox);
+        this.addS3Tab(setting, s3EnabledCheckbox, s3EndpointInput, s3RegionInput, s3BucketInput, s3AccessKeyInput, s3SecretKeyInput, s3CustomDomainInput, s3PathPrefixInput);
 
         return setting;
     }
@@ -225,6 +292,83 @@ export class ShareSettings {
             title: this.plugin.i18n.shareListTitle || "全部分享",
             description: this.plugin.i18n.shareListViewDesc || "查看和管理所有已创建的分享链接",
             createActionElement: () => viewSharesButton,
+        });
+    }
+
+    private addS3Tab(
+        setting: Setting,
+        s3EnabledCheckbox: HTMLInputElement,
+        s3EndpointInput: HTMLInputElement,
+        s3RegionInput: HTMLInputElement,
+        s3BucketInput: HTMLInputElement,
+        s3AccessKeyInput: HTMLInputElement,
+        s3SecretKeyInput: HTMLInputElement,
+        s3CustomDomainInput: HTMLInputElement,
+        s3PathPrefixInput: HTMLInputElement
+    ): void {
+        // 创建 S3 设置标签页
+        setting.addItem({
+            title: "☁️ " + (this.plugin.i18n.settingTabS3 || "S3 存储配置"),
+            createActionElement: () => {
+                const element = document.createElement("div");
+                return element;
+            },
+        });
+
+        // 启用 S3
+        setting.addItem({
+            title: this.plugin.i18n.settingS3Enabled || "启用 S3 存储",
+            description: this.plugin.i18n.settingS3EnabledDesc || "开启后将图片和附件上传到 S3 兼容存储，提升分享访问速度",
+            createActionElement: () => s3EnabledCheckbox,
+        });
+
+        // S3 端点
+        setting.addItem({
+            title: this.plugin.i18n.settingS3Endpoint || "S3 端点地址",
+            description: this.plugin.i18n.settingS3EndpointDesc || "S3 兼容服务的端点，如 s3.amazonaws.com 或自建 MinIO 地址",
+            createActionElement: () => s3EndpointInput,
+        });
+
+        // S3 区域
+        setting.addItem({
+            title: this.plugin.i18n.settingS3Region || "区域 (Region)",
+            description: this.plugin.i18n.settingS3RegionDesc || "存储桶所在区域，如 us-east-1",
+            createActionElement: () => s3RegionInput,
+        });
+
+        // S3 存储桶
+        setting.addItem({
+            title: this.plugin.i18n.settingS3Bucket || "存储桶 (Bucket)",
+            description: this.plugin.i18n.settingS3BucketDesc || "用于存储分享资源的存储桶名称",
+            createActionElement: () => s3BucketInput,
+        });
+
+        // Access Key ID
+        setting.addItem({
+            title: this.plugin.i18n.settingS3AccessKey || "Access Key ID",
+            description: this.plugin.i18n.settingS3AccessKeyDesc || "S3 访问密钥 ID（仅保存在本机）",
+            createActionElement: () => s3AccessKeyInput,
+        });
+
+        // Secret Access Key
+        setting.addItem({
+            title: this.plugin.i18n.settingS3SecretKey || "Secret Access Key",
+            description: this.plugin.i18n.settingS3SecretKeyDesc || "S3 访问密钥（仅保存在本机）",
+            createActionElement: () => s3SecretKeyInput,
+        });
+
+        // 自定义域名
+        setting.addItem({
+            title: this.plugin.i18n.settingS3CustomDomain || "自定义 CDN 域名",
+            description: this.plugin.i18n.settingS3CustomDomainDesc || "可选，使用自定义域名访问资源，如 https://cdn.example.com",
+            createActionElement: () => s3CustomDomainInput,
+        });
+
+        // 路径前缀
+        setting.addItem({
+            title: this.plugin.i18n.settingS3PathPrefix || "路径前缀",
+            description: this.plugin.i18n.settingS3PathPrefixDesc || "存储对象的路径前缀，用于组织文件结构",
+            createActionElement: () => s3PathPrefixInput,
         });
     }
 

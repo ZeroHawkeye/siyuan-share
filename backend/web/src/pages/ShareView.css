@@ -182,6 +182,17 @@
   line-height: 1.8;
 }
 
+/* 确保段落和链接在标题伪元素之上 */
+.markdown-body p {
+  position: relative;
+  z-index: 10;
+}
+
+.markdown-body a {
+  position: relative;
+  z-index: 10;
+}
+
 /* 优化标题锚点样式 */
 .markdown-body h1,
 .markdown-body h2,
@@ -191,20 +202,6 @@
 .markdown-body h6 {
   position: relative;
   scroll-margin-top: var(--share-anchor-offset, 72px);
-}
-
-.markdown-body h1::before,
-.markdown-body h2::before,
-.markdown-body h3::before,
-.markdown-body h4::before,
-.markdown-body h5::before,
-.markdown-body h6::before {
-  content: '';
-  display: block;
-  height: var(--share-anchor-offset, 72px);
-  margin-top: calc(var(--share-anchor-offset, 72px) * -1);
-  visibility: hidden;
-  pointer-events: none;
 }
 
 /* 代码块优化 */

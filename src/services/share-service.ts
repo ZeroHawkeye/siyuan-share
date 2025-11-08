@@ -1,8 +1,9 @@
 import { showMessage } from "siyuan";
 import type SharePlugin from "../index";
-import type { BatchDeleteShareResponse, BlockReference, KramdownResponse, ShareOptions, ShareRecord, ShareResponse } from "../types";
+import type { AssetUploadRecord, BatchDeleteShareResponse, BlockReference, KramdownResponse, ShareOptions, ShareRecord, ShareResponse, UploadProgressCallback } from "../types";
 import { BlockReferenceResolver } from "../utils/block-reference-resolver";
 import { parseKramdownToMarkdown } from "../utils/kramdown-parser";
+import { S3UploadService } from "./s3-upload";
 
 export class ShareService {
     private plugin: SharePlugin;
@@ -17,7 +18,10 @@ export class ShareService {
     /**
      * 创建分享
      */
-    async createShare(options: ShareOptions): Promise<ShareRecord> {
+    async createShare(
+        options: ShareOptions, 
+        onUploadProgress?: UploadProgressCallback
+    ): Promise<ShareRecord> {
         const config = this.plugin.settings.getConfig();
 
         // 检查配置
@@ -35,19 +39,44 @@ export class ShareService {
             throw new Error(this.plugin.i18n.shareErrorExportFailed);
         }
 
-        // 2. 构造请求数据
+        // 2. 处理资源上传（如果启用了 S3）
+        let processedContent = content;
+        let uploadedAssets: AssetUploadRecord[] = [];
+        
+        if (config.s3.enabled) {
+            try {
+                const result = await this.processAndUploadAssets(
+                    content, 
+                    options.docId,
+                    onUploadProgress
+                );
+                processedContent = result.content;
+                uploadedAssets = result.assets;
+            } catch (error) {
+                console.error("资源上传失败:", error);
+                showMessage(
+                    this.plugin.i18n.uploadAssetsFailed || "资源上传失败，将使用原始内容",
+                    4000,
+                    "error"
+                );
+                // 继续使用原始内容，不中断分享流程
+            }
+        }
+
+        // 3. 构造请求数据
         const payload = {
             docId: options.docId,
             docTitle: options.docTitle,
-            content: content,
+            content: processedContent,
             requirePassword: options.requirePassword,
             password: options.requirePassword ? options.password ?? "" : "",
             expireDays: options.expireDays,
             isPublic: options.isPublic,
             references: references, // 包含引用块信息
+            assets: uploadedAssets, // 包含上传的资源信息
         };
 
-        // 3. 调用后端 API
+        // 4. 调用后端 API
         try {
             const response = await this.callShareAPI(config.serverUrl, config.apiToken, payload);
             
@@ -55,7 +84,7 @@ export class ShareService {
                 throw new Error(response.msg || this.plugin.i18n.shareErrorUnknown);
             }
 
-            // 4. 保存分享记录到本地
+            // 5. 保存分享记录到本地
             const shareData = response.data;
             const record: ShareRecord = {
                 id: shareData.shareId,
@@ -71,6 +100,15 @@ export class ShareService {
             };
 
             await this.plugin.shareRecordManager.addRecord(record);
+
+            // 6. 保存资源映射记录到本地
+            if (uploadedAssets.length > 0) {
+                await this.plugin.assetRecordManager.addOrUpdateMapping(
+                    options.docId,
+                    shareData.shareId,
+                    uploadedAssets
+                );
+            }
 
             return record;
         } catch (error) {
@@ -390,5 +428,183 @@ export class ShareService {
         }
 
         return data;
+    }
+
+    /**
+     * 处理文档中的资源并上传到 S3
+    /**
+     * 处理文档中的资源并上传到 S3
+     * @param content Markdown 内容
+     * @param docId 文档ID
+     * @param onProgress 上传进度回调
+     * @returns 处理后的内容和上传记录
+     */
+    private async processAndUploadAssets(
+        content: string,
+        docId: string,
+        onProgress?: UploadProgressCallback
+    ): Promise<{ content: string; assets: AssetUploadRecord[] }> {
+        const config = this.plugin.settings.getConfig();
+        const s3Service = new S3UploadService(config.s3);
+        const uploadedAssets: AssetUploadRecord[] = [];
+
+        // 提取所有资源链接
+        const assetPaths = this.extractAssetPaths(content);
+        
+        if (assetPaths.length === 0) {
+            return { content, assets: [] };
+        }
+
+        console.log(`发现 ${assetPaths.length} 个资源需要处理`);
+
+        // 获取资源文件并上传
+        const filesToUpload: Array<{ file: File; localPath: string; originalUrl: string }> = [];
+
+        for (const assetPath of assetPaths) {
+            try {
+                // 检查是否已上传（去重）
+                const existingAsset = this.plugin.assetRecordManager.findAssetByLocalPath(assetPath);
+                if (existingAsset) {
+                    console.log(`资源已存在，跳过上传: ${assetPath}`);
+                    uploadedAssets.push(existingAsset);
+                    continue;
+                }
+
+                // 获取文件
+                const file = await this.fetchAssetFile(assetPath);
+                if (file) {
+                    filesToUpload.push({ file, localPath: assetPath, originalUrl: assetPath });
+                }
+            } catch (error) {
+                console.error(`获取资源文件失败: ${assetPath}`, error);
+            }
+        }
+
+        // 批量上传
+        if (filesToUpload.length > 0) {
+            const uploaded = await s3Service.uploadFiles(
+                filesToUpload.map(({ file, localPath }) => ({ file, localPath })),
+                onProgress
+            );
+            uploadedAssets.push(...uploaded);
+        }
+
+        // 替换内容中的资源链接
+        let processedContent = content;
+        for (const asset of uploadedAssets) {
+            // 替换 Markdown 图片链接
+            const imagePattern = new RegExp(
+                `!\\[([^\\]]*)\\]\\(${this.escapeRegex(asset.localPath)}\\)`,
+                'g'
+            );
+            processedContent = processedContent.replace(imagePattern, `![$1](${asset.s3Url})`);
+
+            // 替换普通链接
+            const linkPattern = new RegExp(
+                `\\[([^\\]]*)\\]\\(${this.escapeRegex(asset.localPath)}\\)`,
+                'g'
+            );
+            processedContent = processedContent.replace(linkPattern, `[$1](${asset.s3Url})`);
+
+            // 替换直接的 URL 引用
+            const urlPattern = new RegExp(this.escapeRegex(asset.localPath), 'g');
+            processedContent = processedContent.replace(urlPattern, asset.s3Url);
+        }
+
+        return { content: processedContent, assets: uploadedAssets };
+    }
+
+    /**
+     * 从 Markdown 内容中提取资源路径
+     */
+    private extractAssetPaths(content: string): string[] {
+        const paths = new Set<string>();
+
+        // 匹配 Markdown 图片语法：![alt](path)
+        const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+        let match;
+        while ((match = imageRegex.exec(content)) !== null) {
+            const path = match[2];
+            if (this.isLocalAsset(path)) {
+                paths.add(path);
+            }
+        }
+
+        // 匹配 Markdown 链接语法：[text](path)
+        const linkRegex = /\[([^\]]*)\]\(([^)]+)\)/g;
+        while ((match = linkRegex.exec(content)) !== null) {
+            const path = match[2];
+            if (this.isLocalAsset(path)) {
+                paths.add(path);
+            }
+        }
+
+        // 匹配 HTML img 标签
+        const htmlImgRegex = /<img[^>]+src=["']([^"']+)["']/g;
+        while ((match = htmlImgRegex.exec(content)) !== null) {
+            const path = match[1];
+            if (this.isLocalAsset(path)) {
+                paths.add(path);
+            }
+        }
+
+        return Array.from(paths);
+    }
+
+    /**
+     * 判断是否为本地资源
+     */
+    private isLocalAsset(path: string): boolean {
+        // 排除外部链接
+        if (path.startsWith('http://') || path.startsWith('https://')) {
+            return false;
+        }
+        // 排除 data URI
+        if (path.startsWith('data:')) {
+            return false;
+        }
+        // 本地资源通常以 assets/ 或 / 开头
+        return path.startsWith('assets/') || path.startsWith('/assets/');
+    }
+
+    /**
+     * 获取资源文件
+     */
+    private async fetchAssetFile(assetPath: string): Promise<File | null> {
+        const config = this.plugin.settings.getConfig();
+
+        try {
+            // 构造完整的 API 路径
+            let apiPath = assetPath;
+            if (!apiPath.startsWith('/')) {
+                apiPath = '/' + apiPath;
+            }
+
+            const response = await fetch(apiPath, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Token ${config.siyuanToken}`,
+                },
+            });
+
+            if (!response.ok) {
+                console.error(`获取资源失败: ${assetPath}, HTTP ${response.status}`);
+                return null;
+            }
+
+            const blob = await response.blob();
+            const filename = assetPath.split('/').pop() || 'asset';
+            return new File([blob], filename, { type: blob.type });
+        } catch (error) {
+            console.error(`获取资源异常: ${assetPath}`, error);
+            return null;
+        }
+    }
+
+    /**
+     * 转义正则表达式特殊字符
+     */
+    private escapeRegex(str: string): string {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 }

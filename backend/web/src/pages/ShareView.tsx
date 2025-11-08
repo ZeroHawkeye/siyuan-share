@@ -1,5 +1,5 @@
 import { EyeOutlined, UpOutlined } from '@ant-design/icons'
-import { Anchor, Button, Drawer, Input, Layout, message, Spin, Typography } from 'antd'
+import { Anchor, Button, Drawer, Image, Input, Layout, message, Spin, Typography } from 'antd'
 import 'github-markdown-css/github-markdown-light.css'
 import 'highlight.js/styles/github.css'
 import { useEffect, useRef, useState } from 'react'
@@ -364,6 +364,20 @@ function ShareView() {
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw, rehypeHighlight, rehypeSlug]}
+                components={{
+                  img: ({ node, src, alt, title, ...props }) => {
+                    return (
+                      <Image
+                        src={src}
+                        alt={alt}
+                        preview={{
+                          mask: '点击预览',
+                        }}
+                        style={{ maxWidth: '100%', height: 'auto' }}
+                      />
+                    )
+                  }
+                }}
               >
                 {share.content}
               </ReactMarkdown>

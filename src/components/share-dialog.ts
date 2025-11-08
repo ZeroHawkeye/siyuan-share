@@ -1,7 +1,7 @@
 import { Dialog, showMessage } from "siyuan";
 import type SharePlugin from "../index";
 import type { ShareConfig } from "../settings";
-import type { ShareOptions, ShareRecord } from "../types";
+import type { ShareOptions, ShareRecord, UploadProgress } from "../types";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
@@ -24,6 +24,12 @@ export class ShareDialog {
     private existingAccessLabel!: HTMLElement;
     private cancelShareBtn!: HTMLButtonElement | null;
     private closeAllBtn!: HTMLButtonElement | null;
+    
+    // 上传进度相关
+    private uploadProgressContainer!: HTMLElement | null;
+    private uploadProgressList!: HTMLElement | null;
+    private uploadOverallProgress!: HTMLElement | null;
+    private fileProgressMap: Map<string, HTMLElement> = new Map();
 
     constructor(plugin: SharePlugin, docId: string, docTitle: string) {
         this.plugin = plugin;
@@ -93,6 +99,25 @@ export class ShareDialog {
                         <input class="b3-text-field fn__flex-center fn__size200" id="shareExpireDays" type="number" min="1" max="365" />
                     </label>
 
+                    <div class="fn__hr" id="uploadProgressHr" style="display: none;"></div>
+
+                    <div id="uploadProgressContainer" style="display: none;">
+                        <div class="b3-label__text" style="margin-bottom: 8px;">
+                            ${this.plugin.i18n.uploadingAssets || "正在上传资源..."}
+                        </div>
+                        <div id="uploadOverallProgress" style="margin-bottom: 12px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+                                <span id="uploadOverallText">准备中...</span>
+                                <span id="uploadOverallPercent">0%</span>
+                            </div>
+                            <div style="height: 6px; background: var(--b3-theme-surface); border-radius: 3px; overflow: hidden;">
+                                <div id="uploadOverallBar" style="height: 100%; width: 0%; background: var(--b3-theme-primary); transition: width 0.3s;"></div>
+                            </div>
+                        </div>
+                        <div id="uploadProgressList" style="max-height: 200px; overflow-y: auto;">
+                        </div>
+                    </div>
+
                 </div>
             </div>
             <div class="b3-dialog__action">
@@ -109,7 +134,10 @@ export class ShareDialog {
         this.dialog = new Dialog({
             title: this.plugin.i18n.shareDialogTitle,
             content: dialogContent,
-            width: "560px",
+            width: "520px",
+            destroyCallback: () => {
+                this.dialog = null;
+            }
         });
 
         this.cacheElements();
@@ -130,6 +158,11 @@ export class ShareDialog {
         this.existingAccessLabel = this.dialog.element.querySelector("#shareExistingAccess") as HTMLElement;
         this.cancelShareBtn = this.dialog.element.querySelector("#shareCancelBtn");
         this.closeAllBtn = this.dialog.element.querySelector("#shareCloseAllBtn");
+        
+        // 上传进度元素
+        this.uploadProgressContainer = this.dialog.element.querySelector("#uploadProgressContainer");
+        this.uploadProgressList = this.dialog.element.querySelector("#uploadProgressList");
+        this.uploadOverallProgress = this.dialog.element.querySelector("#uploadOverallProgress");
     }
 
     private applyInitialState(config: ShareConfig): void {
@@ -260,14 +293,30 @@ export class ShareDialog {
             docId: this.docId,
             docTitle: this.docTitle,
             requirePassword,
-            password: requirePassword ? password : undefined,
+            password: password || undefined,
             expireDays,
             isPublic,
         };
 
+        const s3Enabled = this.plugin.settings.getConfig().s3?.enabled;
+
         this.confirmBtn.disabled = true;
         try {
-            const record = await this.plugin.shareService.createShare(options);
+            let record;
+            if (s3Enabled) {
+                // 显示上传进度UI
+                this.showUploadProgress();
+                
+                record = await this.plugin.shareService.createShare(options, (progress) => {
+                    this.updateUploadProgress(progress);
+                });
+                
+                // 隐藏上传进度UI
+                this.hideUploadProgress();
+            } else {
+                record = await this.plugin.shareService.createShare(options);
+            }
+            
             this.existingRecord = record;
 
             if (isUpdating) {
@@ -459,5 +508,144 @@ export class ShareDialog {
                     return match;
             }
         });
+    }
+
+    /**
+     * 显示上传进度UI
+     */
+    private showUploadProgress(): void {
+        if (this.uploadProgressContainer) {
+            this.uploadProgressContainer.style.display = '';
+        }
+        const hr = this.dialog.element.querySelector("#uploadProgressHr");
+        if (hr) {
+            (hr as HTMLElement).style.display = '';
+        }
+        this.fileProgressMap.clear();
+        if (this.uploadProgressList) {
+            this.uploadProgressList.innerHTML = '';
+        }
+    }
+
+    /**
+     * 隐藏上传进度UI
+     */
+    private hideUploadProgress(): void {
+        if (this.uploadProgressContainer) {
+            this.uploadProgressContainer.style.display = 'none';
+        }
+        const hr = this.dialog.element.querySelector("#uploadProgressHr");
+        if (hr) {
+            (hr as HTMLElement).style.display = 'none';
+        }
+    }
+
+    /**
+     * 更新上传进度
+     */
+    private updateUploadProgress(progress: UploadProgress): void {
+        if (!this.uploadProgressList) return;
+
+        const fileName = progress.fileName;
+        let fileProgressEl = this.fileProgressMap.get(fileName);
+
+        // 如果是新文件，创建进度条
+        if (!fileProgressEl) {
+            fileProgressEl = document.createElement('div');
+            fileProgressEl.className = 'upload-file-progress';
+            fileProgressEl.style.cssText = 'margin-bottom: 8px; padding: 8px; background: var(--b3-theme-surface); border-radius: 4px;';
+            
+            fileProgressEl.innerHTML = `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+                    <span class="file-name" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${this.escapeHtml(fileName)}">${this.escapeHtml(fileName)}</span>
+                    <span class="file-status" style="margin-left: 8px; color: var(--b3-theme-on-surface-light);">准备中</span>
+                </div>
+                <div style="height: 4px; background: var(--b3-border-color); border-radius: 2px; overflow: hidden;">
+                    <div class="file-progress-bar" style="height: 100%; width: 0%; background: var(--b3-theme-primary); transition: width 0.3s;"></div>
+                </div>
+            `;
+            
+            this.uploadProgressList.appendChild(fileProgressEl);
+            this.fileProgressMap.set(fileName, fileProgressEl);
+        }
+
+        // 更新进度条
+        const progressBar = fileProgressEl.querySelector('.file-progress-bar') as HTMLElement;
+        const statusEl = fileProgressEl.querySelector('.file-status') as HTMLElement;
+
+        if (progressBar) {
+            progressBar.style.width = `${progress.percentage}%`;
+        }
+
+        if (statusEl) {
+            switch (progress.status) {
+                case 'pending':
+                    statusEl.textContent = '准备中';
+                    statusEl.style.color = 'var(--b3-theme-on-surface-light)';
+                    break;
+                case 'uploading':
+                    statusEl.textContent = `${progress.percentage}%`;
+                    statusEl.style.color = 'var(--b3-theme-primary)';
+                    if (progressBar) {
+                        progressBar.style.background = 'var(--b3-theme-primary)';
+                    }
+                    break;
+                case 'success':
+                    statusEl.textContent = '✓ 完成';
+                    statusEl.style.color = 'var(--b3-theme-success-color)';
+                    if (progressBar) {
+                        progressBar.style.background = 'var(--b3-theme-success-color)';
+                    }
+                    break;
+                case 'error':
+                    statusEl.textContent = '✗ 失败';
+                    statusEl.style.color = 'var(--b3-card-error-color)';
+                    if (progressBar) {
+                        progressBar.style.background = 'var(--b3-card-error-color)';
+                    }
+                    break;
+            }
+        }
+
+        // 更新总体进度
+        this.updateOverallProgress();
+    }
+
+    /**
+     * 更新总体进度
+     */
+    private updateOverallProgress(): void {
+        if (!this.uploadOverallProgress || this.fileProgressMap.size === 0) return;
+
+        const totalFiles = this.fileProgressMap.size;
+        let completedFiles = 0;
+        let totalProgress = 0;
+
+        this.fileProgressMap.forEach((el) => {
+            const progressBar = el.querySelector('.file-progress-bar') as HTMLElement;
+            if (progressBar) {
+                const width = parseFloat(progressBar.style.width) || 0;
+                totalProgress += width;
+                if (width >= 100) {
+                    completedFiles++;
+                }
+            }
+        });
+
+        const overallPercentage = Math.round(totalProgress / totalFiles);
+        
+        const textEl = this.uploadOverallProgress.querySelector('#uploadOverallText');
+        const percentEl = this.uploadOverallProgress.querySelector('#uploadOverallPercent');
+        const barEl = this.uploadOverallProgress.querySelector('#uploadOverallBar') as HTMLElement;
+
+        if (textEl) {
+            textEl.textContent = `${completedFiles} / ${totalFiles} 个文件`;
+        }
+        if (percentEl) {
+            percentEl.textContent = `${overallPercentage}%`;
+        }
+        if (barEl) {
+            barEl.style.width = `${overallPercentage}%`;
+        }
     }
 }
