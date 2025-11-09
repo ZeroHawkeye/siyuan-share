@@ -1,3 +1,23 @@
+# 0.4.3 (2025-11-09)
+
+## 新增
+- S3 配置增加 `provider` 字段，支持选择 `aws` 或 `oss`，分别使用 AWS Signature V4 与阿里云 OSS HMAC-SHA1 简单签名。
+- 上传实现在移动端或直传发生 `network-error` 时自动回退到思源内核 `/api/network/forwardProxy` 代理二段上传，解决部分环境下的 CORS/网络限制。
+
+## 优化
+- forwardProxy 上传采用分块 Base64 编码，降低大文件时的内存峰值与潜在调用栈溢出风险。
+- 上传失败日志更明确区分直传网络错误与代理失败原因，便于排查。
+- 设置面板新增存储服务提供商选择下拉框。
+
+## 使用说明
+1. 若使用阿里云 OSS：在设置中选择 Provider 为 “阿里云 OSS (HMAC-SHA1)”，Endpoint 填入形如 `oss-cn-beijing.aliyuncs.com`，Bucket 填入实际桶名。
+2. 若移动端出现直传失败，会自动触发代理上传；请确保已在设置中配置正确的思源内核 Token。
+3. 如需回退旧行为（不使用代理）：可临时将 provider 改回 `aws` 且确认网络环境支持直传，或后续在配置中增加开关再禁用（当前版本默认自动回退）。
+
+## 回退方案
+- 如果代理上传在当前内核版本不可用，可在 `s3-upload.ts` 中临时删除/注释 `uploadViaForwardProxy` 调用逻辑，恢复原始直传。
+- 如发现 OSS 签名不兼容，可暂时选择 `aws` 并使用兼容网关（例如 AWS S3 或 MinIO）。
+
 # Changelog
 
 ## v1.1.0 2025-11-09

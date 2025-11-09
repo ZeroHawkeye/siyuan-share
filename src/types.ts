@@ -8,6 +8,13 @@ export interface S3Config {
     customDomain?: string;
     pathPrefix?: string;
     enablePasteUpload?: boolean;  // 启用粘贴上传功能
+    /**
+     * 存储服务提供商类型：
+     * aws: 标准 AWS S3 或兼容（使用 Signature V4）
+     * oss: 阿里云 OSS（使用 HMAC-SHA1 简单签名）
+     * 为空默认 aws
+     */
+    provider?: 'aws' | 'oss';
 }
 
 export interface ShareOptions {

@@ -12,6 +12,7 @@ import { PasteUploadService } from "./services/paste-upload";
 import { ShareRecordManager } from "./services/share-record";
 import { ShareService } from "./services/share-service";
 import { ShareSettings } from "./settings";
+import { PluginLogger } from "./utils/logger";
 
 export default class SharePlugin extends Plugin {
 
@@ -21,6 +22,7 @@ export default class SharePlugin extends Plugin {
     public shareRecordManager: ShareRecordManager;
     public assetRecordManager: AssetRecordManager;
     public pasteUploadService: PasteUploadService;
+    private logger?: PluginLogger;
     private lastActiveRootId?: string;
     // 文档标题缓存（带过期）
     private docTitleCache = new Map<string, { title: string; expires: number }>();
@@ -47,6 +49,10 @@ export default class SharePlugin extends Plugin {
         // 初始化设置与服务
         this.settings = new ShareSettings(this);
         await this.settings.load();
+        // 初始化日志
+        this.logger = new PluginLogger(this);
+        await this.logger.load();
+        this.logger.install();
         this.shareRecordManager = new ShareRecordManager(this);
         await this.shareRecordManager.load();
         this.assetRecordManager = new AssetRecordManager(this);
@@ -118,6 +124,9 @@ export default class SharePlugin extends Plugin {
             });
         };
         this.eventBus.on("open-menu-doctree", this.handleOpenMenuDocTree);
+
+        // 暴露全局引用以便在独立模块中访问配置/Token（例如 forwardProxy 兜底上传）
+        try { (window as any).sharePlugin = this; } catch (_) { /* ignore */ }
     }
 
     onLayoutReady() {
@@ -147,8 +156,12 @@ export default class SharePlugin extends Plugin {
 
     onunload() {
         console.log(this.i18n.byePlugin);
+        try { if ((window as any).sharePlugin === this) (window as any).sharePlugin = undefined; } catch (_) { /* ignore */ }
         if (this.shareRecordManager) {
             this.shareRecordManager.stopAutoSync();
+        }
+        if (this.logger) {
+            this.logger.uninstall();
         }
         // 禁用粘贴上传
         if (this.pasteUploadService) {
@@ -170,6 +183,16 @@ export default class SharePlugin extends Plugin {
      */
     showMessage(msg: string, timeout: number = 3000, type: "info" | "error" = "info") {
         showMessage(msg, timeout, type);
+    }
+
+    /** 导出日志文本 */
+    public getLogsText(): string {
+        try { return this.logger?.toText() || ""; } catch { return ""; }
+    }
+
+    /** 清空日志 */
+    public clearLogs(): void {
+        try { this.logger?.clear(); } catch { /* ignore */ }
     }
 
     private getEditor() {

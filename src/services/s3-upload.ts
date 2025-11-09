@@ -191,17 +191,27 @@ export class S3UploadService {
         // 使用 AWS Signature Version 4
         const url = `https://${bucket}.${endpoint}/${s3Key}`;
         
-        // 生成签名和请求头
-        const headers = await this.generateSignedHeaders(
-            'PUT',
-            s3Key,
-            file.type || this.guessContentType(file.name),
-            file.size
-        );
+        // 根据 provider 生成不同的签名头
+        const contentType = file.type || this.guessContentType(file.name);
+        let headers: Record<string, string>;
+        const provider = this.config.provider || 'aws';
+        if (provider === 'oss') {
+            headers = await this.generateOssHeaders('PUT', s3Key, contentType);
+        } else {
+            headers = await this.generateSignedHeaders(
+                'PUT',
+                s3Key,
+                contentType,
+                file.size
+            );
+        }
 
-        // 使用 XMLHttpRequest 以支持上传进度
+        // 使用 XMLHttpRequest 以支持上传进度（失败后自动回退到 forwardProxy 二段上传）
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
+            const startTs = Date.now();
+            const meta = { key: s3Key, size: file.size, name: file.name };
+            console.debug('[S3Upload] start', meta, { url });
             
             // 监听上传进度
             if (onProgress) {
@@ -221,31 +231,51 @@ export class S3UploadService {
 
             // 监听完成
             xhr.addEventListener('load', () => {
+                const duration = Date.now() - startTs;
                 if (xhr.status >= 200 && xhr.status < 300) {
                     // 返回访问 URL（使用自定义域名或默认 URL）
                     if (this.config.customDomain) {
                         const domain = this.config.customDomain.replace(/\/$/, '');
-                        resolve(`${domain}/${s3Key}`);
+                        const finalUrl = `${domain}/${s3Key}`;
+                        console.debug('[S3Upload] success', { ...meta, duration, status: xhr.status, finalUrl });
+                        resolve(finalUrl);
                     } else {
+                        console.debug('[S3Upload] success', { ...meta, duration, status: xhr.status, finalUrl: url });
                         resolve(url);
                     }
                 } else {
+                    console.error('[S3Upload] http-error', { ...meta, status: xhr.status, resp: xhr.responseText, duration });
                     reject(new Error(`S3 上传失败: HTTP ${xhr.status} - ${xhr.responseText}`));
                 }
             });
 
             // 监听错误
-            xhr.addEventListener('error', () => {
-                reject(new Error('网络错误，上传失败'));
+            xhr.addEventListener('error', async () => {
+                const duration = Date.now() - startTs;
+                console.error('[S3Upload] network-error', { ...meta, duration });
+                // 尝试使用思源内核 forwardProxy 进行二段上传（规避移动端或小程序环境的直传限制/CORS）
+                try {
+                    if (onProgress) {
+                        onProgress({ fileName: file.name, current: 0, total: file.size, percentage: 0, status: 'uploading' });
+                    }
+                    const proxiedUrl = await this.uploadViaForwardProxy(file, s3Key, headers, onProgress);
+                    resolve(proxiedUrl);
+                    return;
+                } catch (proxyErr) {
+                    reject(proxyErr instanceof Error ? proxyErr : new Error(String(proxyErr)));
+                }
             });
 
             // 监听中止
             xhr.addEventListener('abort', () => {
+                const duration = Date.now() - startTs;
+                console.warn('[S3Upload] aborted', { ...meta, duration });
                 reject(new Error('上传已取消'));
             });
 
             // 发送请求
-            xhr.open('PUT', url);
+            xhr.open('PUT', url, true);
+            // 一些兼容性的额外 header（有的 S3 兼容服务对 Content-Length/Date 严格，浏览器无法手动设定 Content-Length）
             
             // 设置请求头
             for (const key in headers) {
@@ -259,6 +289,82 @@ export class S3UploadService {
     }
 
     /**
+     * 通过思源内核 forwardProxy 端点上传文件（后端代签名/代转发）
+     * 前端先向目标直传 URL 发起预检失败时回退此策略。
+     * 要求内核 Token 已配置。
+     */
+    private async uploadViaForwardProxy(
+        file: File,
+        s3Key: string,
+        originalHeaders: Record<string, string>,
+        onProgress?: UploadProgressCallback
+    ): Promise<string> {
+        // 构造目标直传 URL 与请求体（多段 FormData）
+        const endpoint = this.config.endpoint.replace(/^https?:\/\//, '');
+        const bucket = this.config.bucket;
+        const url = `https://${bucket}.${endpoint}/${s3Key}`;
+
+        // 将文件作为二进制转发；forwardProxy 要求：url, method, headers, payload(base64)
+        const arrayBuf = await file.arrayBuffer();
+        const uint8 = new Uint8Array(arrayBuf);
+        // 分块转 base64，避免移动端内存/调用栈溢出
+        const CHUNK = 0x8000; // 32KB
+        let binary = '';
+        for (let i = 0; i < uint8.length; i += CHUNK) {
+            const slice = uint8.subarray(i, i + CHUNK);
+            binary += String.fromCharCode.apply(null, Array.from(slice) as any);
+        }
+        const base64Payload = btoa(binary);
+
+        // 移除浏览器限制的头（Host 等）
+        const safeHeaders: Record<string, string> = {};
+        for (const k of Object.keys(originalHeaders)) {
+            if (/^host$/i.test(k)) continue;
+            safeHeaders[k] = originalHeaders[k];
+        }
+
+        // 进度无法真实获取（后端一次性转发），这里模拟分段进度
+        if (onProgress) {
+            onProgress({ fileName: file.name, current: 0, total: file.size, percentage: 5, status: 'uploading' });
+        }
+        const configToken = (window as any).sharePlugin?.settings?.getConfig?.().siyuanToken || '';
+        if (!configToken) throw new Error('forwardProxy 失败：缺少思源内核 Token');
+        const resp = await fetch('/api/network/forwardProxy', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Token ${configToken}`,
+            },
+            body: JSON.stringify({
+                url,
+                method: 'PUT',
+                headers: safeHeaders,
+                payload: base64Payload,
+                // 额外元数据用于后端可选日志（兼容旧后端忽略）
+                meta: { s3Key, size: file.size, contentType: file.type || this.guessContentType(file.name) }
+            })
+        });
+        const ct = resp.headers.get('content-type') || '';
+        if (ct.includes('application/json')) {
+            const result = await resp.json().catch(()=>({}));
+            if (!resp.ok || (typeof result.code !== 'undefined' && result.code !== 0)) {
+                throw new Error('forwardProxy 上传失败: ' + (result.msg || `HTTP ${resp.status}`));
+            }
+        } else if (!resp.ok) {
+            throw new Error(`forwardProxy 上传失败: HTTP ${resp.status}`);
+        }
+        if (onProgress) {
+            onProgress({ fileName: file.name, current: file.size, total: file.size, percentage: 100, status: 'success' });
+        }
+        // 自定义域名处理保持一致
+        if (this.config.customDomain) {
+            const domain = this.config.customDomain.replace(/\/$/, '');
+            return `${domain}/${s3Key}`;
+        }
+        return url;
+    }
+
+    /**
      * 执行实际的 S3 删除
      */
     private async performDelete(s3Key: string): Promise<void> {
@@ -267,13 +373,18 @@ export class S3UploadService {
         const bucket = this.config.bucket;
         const url = `https://${bucket}.${endpoint}/${s3Key}`;
         
-        // 生成签名和请求头
-        const headers = await this.generateSignedHeaders(
-            'DELETE',
-            s3Key,
-            '',
-            0
-        );
+        const provider = this.config.provider || 'aws';
+        let headers: Record<string, string>;
+        if (provider === 'oss') {
+            headers = await this.generateOssHeaders('DELETE', s3Key, '');
+        } else {
+            headers = await this.generateSignedHeaders(
+                'DELETE',
+                s3Key,
+                '',
+                0
+            );
+        }
 
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
@@ -319,7 +430,8 @@ export class S3UploadService {
         const amzDate = this.formatAmzDate(now);
         const endpoint = this.config.endpoint.replace(/^https?:\/\//, '');
         const bucket = this.config.bucket;
-            const host = `${bucket}.${endpoint}`; // Host header removed
+        // 按照 AWS Signature V4 规范，Host 头需要参与签名（浏览器自动发送 Host，无需手动设置）
+        const host = `${bucket}.${endpoint}`;
 
         // 步骤 1: 创建规范化请求
         const payloadHash = 'UNSIGNED-PAYLOAD';
@@ -330,12 +442,13 @@ export class S3UploadService {
         // 规范化查询字符串（空）
         const canonicalQueryString = '';
         
-        // 规范化头部
-            const canonicalHeaders = `x-amz-content-sha256:${payloadHash}\n` +
-                `x-amz-date:${amzDate}\n`; // Removed Host header
+        // 规范化头部（按字母序排序：host, x-amz-content-sha256, x-amz-date）
+        const canonicalHeaders = `host:${host}\n` +
+            `x-amz-content-sha256:${payloadHash}\n` +
+            `x-amz-date:${amzDate}\n`;
         
-        // 已签名的头部列表
-            const signedHeaders = 'x-amz-content-sha256;x-amz-date'; // Removed Host header from signed headers
+        // 已签名的头部列表（与 canonicalHeaders 对应顺序）
+        const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
         
         // 规范化请求
         const canonicalRequest = 
@@ -377,12 +490,66 @@ export class S3UploadService {
             `Signature=${signature}`;
 
         // 返回所有必需的头部
-            return {
-                'Content-Type': contentType,
-                'x-amz-date': amzDate,
-                'x-amz-content-sha256': payloadHash,
-                'Authorization': authorizationHeader,
-            }; // Removed Host header
+        return {
+            'Content-Type': contentType,
+            'x-amz-date': amzDate,
+            'x-amz-content-sha256': payloadHash,
+            // 不返回 Host：浏览器环境无法主动设置该保留头，但它已被签名
+            'Authorization': authorizationHeader,
+        };
+    }
+
+    /**
+     * 生成阿里云 OSS 简单签名头（HMAC-SHA1）
+     * 参考：https://help.aliyun.com/zh/oss/developer-reference/signature-methods
+     * 与 AWS V4 不同，OSS 这里仅使用简单签名，降低跨域预检复杂度
+     */
+    private async generateOssHeaders(
+        method: string,
+        key: string,
+        contentType: string
+    ): Promise<Record<string, string>> {
+        const endpoint = this.config.endpoint.replace(/^https?:\/\//, '');
+        const bucket = this.config.bucket;
+        const resource = `/${bucket}/${key}`;
+        const date = new Date().toUTCString();
+        const contentMD5 = '';
+        const canonicalizedOSSHeaders = '';
+        const stringToSign = [
+            method,
+            contentMD5,
+            contentType,
+            date,
+            canonicalizedOSSHeaders + resource
+        ].join('\n');
+        const signature = await this.hmacSha1Base64(this.config.secretAccessKey, stringToSign);
+        return {
+            'Date': date,
+            'Content-Type': contentType || 'application/octet-stream',
+            'Authorization': `OSS ${this.config.accessKeyId}:${signature}`,
+        };
+    }
+
+    /**
+     * HMAC-SHA1 计算并返回 Base64 签名（用于 OSS）
+     */
+    private async hmacSha1Base64(secret: string, message: string): Promise<string> {
+        const enc = new TextEncoder();
+        const keyData = enc.encode(secret);
+        const msgData = enc.encode(message);
+        const cryptoKey = await crypto.subtle.importKey(
+            'raw',
+            keyData,
+            { name: 'HMAC', hash: 'SHA-1' },
+            false,
+            ['sign']
+        );
+        const sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
+        // 转 Base64
+        const bytes = Array.from(new Uint8Array(sigBuf));
+        const binary = bytes.map(b => String.fromCharCode(b)).join('');
+        // 浏览器有 btoa
+        return btoa(binary);
     }
 
     /**

@@ -31,6 +31,7 @@ export const DEFAULT_CONFIG: ShareConfig = {
         customDomain: "",
         pathPrefix: "siyuan-share",
         enablePasteUpload: false,
+        provider: 'aws',
     },
 };
 
@@ -123,6 +124,21 @@ export class ShareSettings {
         s3EndpointInput.placeholder = "s3.amazonaws.com";
         s3EndpointInput.value = this.config.s3.endpoint;
 
+        // provider 选择（aws / oss）
+        const s3ProviderSelect = document.createElement('select');
+        s3ProviderSelect.className = 'b3-select fn__block';
+        const providers: Array<{val:'aws'|'oss';text:string}> = [
+            { val: 'aws', text: 'AWS / 兼容 (SigV4)' },
+            { val: 'oss', text: '阿里云 OSS (HMAC-SHA1)' },
+        ];
+        for (const p of providers) {
+            const opt = document.createElement('option');
+            opt.value = p.val;
+            opt.textContent = p.text;
+            if ((this.config.s3.provider||'aws') === p.val) opt.selected = true;
+            s3ProviderSelect.appendChild(opt);
+        }
+
         const s3RegionInput = document.createElement("input");
         s3RegionInput.className = "b3-text-field fn__block";
         s3RegionInput.placeholder = "us-east-1";
@@ -175,6 +191,7 @@ export class ShareSettings {
                 this.config.s3.secretAccessKey = s3SecretKeyInput.value.trim();
                 this.config.s3.customDomain = s3CustomDomainInput.value.trim();
                 this.config.s3.pathPrefix = s3PathPrefixInput.value.trim();
+                this.config.s3.provider = (s3ProviderSelect.value as ('aws'|'oss')) || 'aws';
                 
                 await this.save();
             }
@@ -182,6 +199,12 @@ export class ShareSettings {
         // 添加侧边菜单
         this.addGeneralTab(setting, serverUrlInput, apiTokenInput, siyuanTokenInput, defaultPasswordCheckbox, defaultExpireInput, defaultPublicCheckbox);
         this.addS3Tab(setting, s3EnabledCheckbox, s3PasteUploadCheckbox, s3EndpointInput, s3RegionInput, s3BucketInput, s3AccessKeyInput, s3SecretKeyInput, s3CustomDomainInput, s3PathPrefixInput);
+        // 在 S3 标签页追加 provider 选择项
+        setting.addItem({
+            title: 'S3 Provider 类型',
+            description: '选择使用的存储服务类型：标准 AWS S3 及兼容实现，或阿里云 OSS（自动使用对应签名算法）',
+            createActionElement: () => s3ProviderSelect,
+        });
 
         return setting;
     }
@@ -327,6 +350,72 @@ export class ShareSettings {
             title: this.plugin.i18n.assetListTitle || "静态资源管理",
             description: this.plugin.i18n.assetListViewDesc || "查看和管理已上传到 S3 的静态资源文件",
             createActionElement: () => viewAssetsButton,
+        });
+
+        // 日志下载与清理
+        const logExportWrapper = document.createElement('div');
+        logExportWrapper.style.display = 'flex';
+        logExportWrapper.style.flexDirection = 'column';
+        logExportWrapper.style.gap = '8px';
+
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'b3-button b3-button--outline fn__block';
+        downloadBtn.textContent = '下载插件日志';
+        downloadBtn.addEventListener('click', () => {
+            const text = this.plugin.getLogsText();
+            if (!text) {
+                this.plugin.showMessage('暂无日志可下载', 3000, 'error');
+                return;
+            }
+            try {
+                const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const ts = new Date();
+                const tsStr = ts.toISOString().replace(/[:.]/g,'-');
+                a.download = `siyuan-share-logs-${tsStr}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                this.plugin.showMessage('日志已触发下载', 3000, 'info');
+            } catch (e:any) {
+                this.plugin.showMessage('下载失败: ' + (e?.message||e), 4000, 'error');
+            }
+        });
+
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'b3-button b3-button--outline fn__block';
+        clearBtn.textContent = '清空日志';
+        clearBtn.addEventListener('click', () => {
+            if (!confirm('确定要清空当前所有缓存日志吗？此操作不可恢复。')) return;
+            this.plugin.clearLogs();
+            this.plugin.showMessage('日志已清空', 2500, 'info');
+        });
+
+        const previewArea = document.createElement('textarea');
+        previewArea.className = 'b3-text-field fn__block';
+        previewArea.style.height = '120px';
+        previewArea.placeholder = '点击“刷新日志预览”获取当前内存日志内容';
+        previewArea.readOnly = true;
+
+        const refreshBtn = document.createElement('button');
+        refreshBtn.className = 'b3-button b3-button--outline fn__block';
+        refreshBtn.textContent = '刷新日志预览';
+        refreshBtn.addEventListener('click', () => {
+            previewArea.value = this.plugin.getLogsText() || '（空）';
+        });
+
+        logExportWrapper.appendChild(refreshBtn);
+        logExportWrapper.appendChild(previewArea);
+        logExportWrapper.appendChild(downloadBtn);
+        logExportWrapper.appendChild(clearBtn);
+
+        setting.addItem({
+            title: '🔍 日志调试',
+            description: '下载、查看或清空插件运行日志（含错误、上传调试信息，移动端可用）。',
+            createActionElement: () => logExportWrapper,
         });
     }
 
