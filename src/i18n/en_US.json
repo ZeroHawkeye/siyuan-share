@@ -30,6 +30,8 @@
   "settingTabS3": "S3 Storage Config",
   "settingS3Enabled": "Enable S3 Storage",
   "settingS3EnabledDesc": "Upload images and attachments to S3-compatible storage for faster access",
+  "settingS3PasteUpload": "Enable Paste Upload",
+  "settingS3PasteUploadDesc": "When enabled, paste files will be automatically uploaded to S3 and links will be replaced (requires S3 bucket public access)",
   "settingS3Endpoint": "S3 Endpoint",
   "settingS3EndpointDesc": "S3-compatible service endpoint, e.g. s3.amazonaws.com or self-hosted MinIO",
   "settingS3Region": "Region",
@@ -53,6 +55,12 @@
   "uploadProgressSuccess": "✓ Done",
   "uploadProgressError": "✗ Failed",
   "uploadProgressOverall": "files",
+
+  "pasteUploadStarted": "Uploading files...",
+  "pasteUploadSuccess": "Files uploaded successfully",
+  "pasteUploadFailed": "File upload failed",
+  "pasteUploadNotEnabled": "Please enable paste upload first",
+  "pasteUploadS3NotConfigured": "Please configure S3 storage first",
 
   "shareMenuShareDoc": "Share this document",
   "shareTopBarTitle": "Share",

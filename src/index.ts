@@ -8,6 +8,7 @@ import {
 import { ShareDialog } from "./components/share-dialog";
 import "./index.scss";
 import { AssetRecordManager } from "./services/asset-record";
+import { PasteUploadService } from "./services/paste-upload";
 import { ShareRecordManager } from "./services/share-record";
 import { ShareService } from "./services/share-service";
 import { ShareSettings } from "./settings";
@@ -19,6 +20,7 @@ export default class SharePlugin extends Plugin {
     public shareService: ShareService;
     public shareRecordManager: ShareRecordManager;
     public assetRecordManager: AssetRecordManager;
+    public pasteUploadService: PasteUploadService;
     private lastActiveRootId?: string;
     // 文档标题缓存（带过期）
     private docTitleCache = new Map<string, { title: string; expires: number }>();
@@ -47,10 +49,16 @@ export default class SharePlugin extends Plugin {
         await this.settings.load();
         this.shareRecordManager = new ShareRecordManager(this);
         await this.shareRecordManager.load();
-        this.shareRecordManager.startAutoSync();
         this.assetRecordManager = new AssetRecordManager(this);
         await this.assetRecordManager.load();
         this.shareService = new ShareService(this);
+        this.pasteUploadService = new PasteUploadService(this);
+
+        // 根据配置决定是否启用粘贴上传
+        const config = this.settings.getConfig();
+        if (config.s3.enabled && config.s3.enablePasteUpload) {
+            this.pasteUploadService.enable();
+        }
 
         // 设置面板
         this.setting = this.settings.createSettingPanel();
@@ -141,6 +149,10 @@ export default class SharePlugin extends Plugin {
         console.log(this.i18n.byePlugin);
         if (this.shareRecordManager) {
             this.shareRecordManager.stopAutoSync();
+        }
+        // 禁用粘贴上传
+        if (this.pasteUploadService) {
+            this.pasteUploadService.disable();
         }
         // 移除事件监听
         if (this.handleSwitchProtyle) this.eventBus.off("switch-protyle", this.handleSwitchProtyle);

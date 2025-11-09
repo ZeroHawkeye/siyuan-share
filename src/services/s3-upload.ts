@@ -22,7 +22,8 @@ export class S3UploadService {
     async uploadFile(
         file: File, 
         localPath: string, 
-        onProgress?: UploadProgressCallback
+        onProgress?: UploadProgressCallback,
+        precomputedHash?: string
     ): Promise<AssetUploadRecord> {
         if (!this.config.enabled) {
             throw new Error("S3 存储未启用");
@@ -44,8 +45,8 @@ export class S3UploadService {
         }
 
         try {
-            // 生成文件哈希
-            const hash = await this.calculateFileHash(file);
+            // 生成文件哈希（允许外部传入预计算值以复用与去重）
+            const hash = precomputedHash || await this.calculateFileHash(file);
             
             // 构造 S3 对象键名
             const timestamp = Date.now();
@@ -318,7 +319,7 @@ export class S3UploadService {
         const amzDate = this.formatAmzDate(now);
         const endpoint = this.config.endpoint.replace(/^https?:\/\//, '');
         const bucket = this.config.bucket;
-        const host = `${bucket}.${endpoint}`;
+            const host = `${bucket}.${endpoint}`; // Host header removed
 
         // 步骤 1: 创建规范化请求
         const payloadHash = 'UNSIGNED-PAYLOAD';
@@ -330,13 +331,11 @@ export class S3UploadService {
         const canonicalQueryString = '';
         
         // 规范化头部
-        const canonicalHeaders = 
-            `host:${host}\n` +
-            `x-amz-content-sha256:${payloadHash}\n` +
-            `x-amz-date:${amzDate}\n`;
+            const canonicalHeaders = `x-amz-content-sha256:${payloadHash}\n` +
+                `x-amz-date:${amzDate}\n`; // Removed Host header
         
         // 已签名的头部列表
-        const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+            const signedHeaders = 'x-amz-content-sha256;x-amz-date'; // Removed Host header from signed headers
         
         // 规范化请求
         const canonicalRequest = 
@@ -378,13 +377,12 @@ export class S3UploadService {
             `Signature=${signature}`;
 
         // 返回所有必需的头部
-        return {
-            'Host': host,
-            'Content-Type': contentType,
-            'x-amz-date': amzDate,
-            'x-amz-content-sha256': payloadHash,
-            'Authorization': authorizationHeader,
-        };
+            return {
+                'Content-Type': contentType,
+                'x-amz-date': amzDate,
+                'x-amz-content-sha256': payloadHash,
+                'Authorization': authorizationHeader,
+            }; // Removed Host header
     }
 
     /**
@@ -458,6 +456,13 @@ export class S3UploadService {
             return hex.length === 1 ? '0' + hex : hex;
         }).join('');
         return hashHex.substring(0, 16); // 使用前 16 个字符
+    }
+
+    /**
+     * 公开的哈希计算方法，供去重调用
+     */
+    public async calculateFileHashPublic(file: File): Promise<string> {
+        return this.calculateFileHash(file);
     }
 
     /**

@@ -30,6 +30,8 @@
   "settingTabS3": "S3 存储配置",
   "settingS3Enabled": "启用 S3 存储",
   "settingS3EnabledDesc": "开启后将图片和附件上传到 S3 兼容存储，提升分享访问速度",
+  "settingS3PasteUpload": "启用粘贴上传功能",
+  "settingS3PasteUploadDesc": "开启后可作为图床使用，粘贴文件自动上传到 S3 并替换链接（需要 S3 仓库公共访问权限）",
   "settingS3Endpoint": "S3 端点地址",
   "settingS3EndpointDesc": "S3 兼容服务的端点，如 s3.amazonaws.com 或自建 MinIO 地址",
   "settingS3Region": "区域 (Region)",
@@ -53,6 +55,12 @@
   "uploadProgressSuccess": "✓ 完成",
   "uploadProgressError": "✗ 失败",
   "uploadProgressOverall": "个文件",
+
+  "pasteUploadStarted": "正在上传文件...",
+  "pasteUploadSuccess": "文件上传成功",
+  "pasteUploadFailed": "文件上传失败",
+  "pasteUploadNotEnabled": "请先启用粘贴上传功能",
+  "pasteUploadS3NotConfigured": "请先配置 S3 存储",
 
   "shareMenuShareDoc": "分享此文档",
   "shareTopBarTitle": "分享文档",

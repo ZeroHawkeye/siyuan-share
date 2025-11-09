@@ -7,6 +7,7 @@ export interface S3Config {
     secretAccessKey: string;
     customDomain?: string;
     pathPrefix?: string;
+    enablePasteUpload?: boolean;  // 启用粘贴上传功能
 }
 
 export interface ShareOptions {

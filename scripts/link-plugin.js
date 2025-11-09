@@ -5,8 +5,8 @@ const path = require('path');
 const SIYUAN_WORKSPACE = process.env.SIYUAN_WORKSPACE || 'C:\\Users\\zero\\Documents\\zeroDocs';
 const PLUGIN_NAME = 'siyuan-share';
 
-// 需要链接的文件
-const FILES_TO_LINK = [
+// 需要复制的文件
+const FILES_TO_COPY = [
   'plugin.json',
   'index.js',
   'index.css',
@@ -20,7 +20,7 @@ const FILES_TO_LINK = [
 const sourceDir = path.resolve(__dirname, '..');
 const targetDir = path.join(SIYUAN_WORKSPACE, 'data', 'plugins', PLUGIN_NAME);
 
-console.log('🔗 开始链接插件到思源笔记...');
+console.log('📋 开始复制插件到思源笔记...');
 console.log(`   源目录: ${sourceDir}`);
 console.log(`   目标目录: ${targetDir}`);
 
@@ -30,47 +30,100 @@ if (!fs.existsSync(targetDir)) {
   console.log('✓ 创建插件目录');
 }
 
-// 创建符号链接
-let successCount = 0;
-let skipCount = 0;
+/**
+ * 递归复制文件或目录
+ */
+function copyRecursive(src, dest) {
+  const stats = fs.statSync(src);
+  
+  if (stats.isDirectory()) {
+    // 创建目标目录
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+    }
+    
+    // 递归复制目录内容
+    const entries = fs.readdirSync(src);
+    for (const entry of entries) {
+      copyRecursive(path.join(src, entry), path.join(dest, entry));
+    }
+  } else {
+    // 复制文件
+    fs.copyFileSync(src, dest);
+  }
+}
 
-FILES_TO_LINK.forEach(file => {
+/**
+ * 复制单个文件或目录
+ */
+function copyFile(file) {
   const sourcePath = path.join(sourceDir, file);
   const targetPath = path.join(targetDir, file);
 
   // 检查源文件是否存在
   if (!fs.existsSync(sourcePath)) {
     console.log(`⚠ 跳过不存在的文件: ${file}`);
-    return;
+    return false;
   }
 
   try {
     // 如果目标已存在，先删除
     if (fs.existsSync(targetPath)) {
-      const stats = fs.lstatSync(targetPath);
-      if (stats.isSymbolicLink()) {
-        fs.unlinkSync(targetPath);
-      } else {
-        // 如果是真实文件/目录，先备份
-        const backupPath = targetPath + '.backup';
-        if (fs.existsSync(backupPath)) {
-          fs.rmSync(backupPath, { recursive: true, force: true });
-        }
-        fs.renameSync(targetPath, backupPath);
-        console.log(`  备份已存在的文件: ${file} -> ${file}.backup`);
-      }
+      fs.rmSync(targetPath, { recursive: true, force: true });
     }
 
-    // 创建符号链接
-    const type = fs.statSync(sourcePath).isDirectory() ? 'junction' : 'file';
-    fs.symlinkSync(sourcePath, targetPath, type);
-    console.log(`✓ 链接: ${file}`);
-    successCount++;
+    // 复制文件或目录
+    copyRecursive(sourcePath, targetPath);
+    console.log(`✓ 复制: ${file}`);
+    return true;
   } catch (error) {
-    console.error(`✗ 链接失败 ${file}:`, error.message);
+    console.error(`✗ 复制失败 ${file}:`, error.message);
+    return false;
+  }
+}
+
+// 执行初始复制
+let successCount = 0;
+FILES_TO_COPY.forEach(file => {
+  if (copyFile(file)) {
+    successCount++;
   }
 });
 
-console.log(`\n🎉 链接完成！成功: ${successCount}, 跳过: ${skipCount}`);
-console.log('💡 提示: 现在可以重启思源笔记来加载插件');
-console.log('💡 如果需要修改工作空间路径，请设置环境变量 SIYUAN_WORKSPACE');
+console.log(`\n🎉 复制完成！成功: ${successCount}/${FILES_TO_COPY.length}`);
+
+// 如果启用了监视模式
+if (process.argv.includes('--watch')) {
+  console.log('\n👀 开启文件监视模式...');
+  console.log('💡 文件变更将自动同步到插件目录');
+  console.log('💡 按 Ctrl+C 退出监视模式\n');
+
+  // 监视文件变化
+  FILES_TO_COPY.forEach(file => {
+    const sourcePath = path.join(sourceDir, file);
+    
+    if (!fs.existsSync(sourcePath)) {
+      return;
+    }
+
+    try {
+      const watcher = fs.watch(sourcePath, { recursive: true }, (eventType, filename) => {
+        console.log(`🔄 检测到变更: ${file}${filename ? '/' + filename : ''}`);
+        if (copyFile(file)) {
+          console.log(`✓ 已更新: ${file}`);
+        }
+      });
+
+      // 处理错误
+      watcher.on('error', (error) => {
+        console.error(`✗ 监视错误 ${file}:`, error.message);
+      });
+    } catch (error) {
+      console.error(`✗ 无法监视 ${file}:`, error.message);
+    }
+  });
+} else {
+  console.log('💡 提示: 现在可以重启思源笔记来加载插件');
+  console.log('💡 如果需要修改工作空间路径，请设置环境变量 SIYUAN_WORKSPACE');
+  console.log('💡 使用 --watch 参数启用文件监视模式');
+}

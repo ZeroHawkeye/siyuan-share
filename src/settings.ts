@@ -30,6 +30,7 @@ export const DEFAULT_CONFIG: ShareConfig = {
         secretAccessKey: "",
         customDomain: "",
         pathPrefix: "siyuan-share",
+        enablePasteUpload: false,
     },
 };
 
@@ -51,6 +52,15 @@ export class ShareSettings {
 
     async save(): Promise<void> {
         await this.plugin.saveData("share-config", this.config);
+        
+        // 根据配置动态启用/禁用粘贴上传
+        if (this.plugin.pasteUploadService) {
+            if (this.config.s3.enabled && this.config.s3.enablePasteUpload) {
+                this.plugin.pasteUploadService.enable();
+            } else {
+                this.plugin.pasteUploadService.disable();
+            }
+        }
     }
 
     getConfig(): ShareConfig {
@@ -103,6 +113,11 @@ export class ShareSettings {
         s3EnabledCheckbox.className = "b3-switch fn__flex-center";
         s3EnabledCheckbox.checked = this.config.s3.enabled;
 
+        const s3PasteUploadCheckbox = document.createElement("input");
+        s3PasteUploadCheckbox.type = "checkbox";
+        s3PasteUploadCheckbox.className = "b3-switch fn__flex-center";
+        s3PasteUploadCheckbox.checked = this.config.s3.enablePasteUpload || false;
+
         const s3EndpointInput = document.createElement("input");
         s3EndpointInput.className = "b3-text-field fn__block";
         s3EndpointInput.placeholder = "s3.amazonaws.com";
@@ -152,6 +167,7 @@ export class ShareSettings {
                 
                 // 保存 S3 配置
                 this.config.s3.enabled = s3EnabledCheckbox.checked;
+                this.config.s3.enablePasteUpload = s3PasteUploadCheckbox.checked;
                 this.config.s3.endpoint = s3EndpointInput.value.trim();
                 this.config.s3.region = s3RegionInput.value.trim();
                 this.config.s3.bucket = s3BucketInput.value.trim();
@@ -163,10 +179,9 @@ export class ShareSettings {
                 await this.save();
             }
         });
-
         // 添加侧边菜单
         this.addGeneralTab(setting, serverUrlInput, apiTokenInput, siyuanTokenInput, defaultPasswordCheckbox, defaultExpireInput, defaultPublicCheckbox);
-        this.addS3Tab(setting, s3EnabledCheckbox, s3EndpointInput, s3RegionInput, s3BucketInput, s3AccessKeyInput, s3SecretKeyInput, s3CustomDomainInput, s3PathPrefixInput);
+        this.addS3Tab(setting, s3EnabledCheckbox, s3PasteUploadCheckbox, s3EndpointInput, s3RegionInput, s3BucketInput, s3AccessKeyInput, s3SecretKeyInput, s3CustomDomainInput, s3PathPrefixInput);
 
         return setting;
     }
@@ -318,6 +333,7 @@ export class ShareSettings {
     private addS3Tab(
         setting: Setting,
         s3EnabledCheckbox: HTMLInputElement,
+        s3PasteUploadCheckbox: HTMLInputElement,
         s3EndpointInput: HTMLInputElement,
         s3RegionInput: HTMLInputElement,
         s3BucketInput: HTMLInputElement,
@@ -334,7 +350,6 @@ export class ShareSettings {
                 return element;
             },
         });
-
         // 启用 S3
         setting.addItem({
             title: this.plugin.i18n.settingS3Enabled || "启用 S3 存储",
@@ -342,6 +357,14 @@ export class ShareSettings {
             createActionElement: () => s3EnabledCheckbox,
         });
 
+        // 启用粘贴上传
+        setting.addItem({
+            title: this.plugin.i18n.settingS3PasteUpload || "启用粘贴上传功能",
+            description: this.plugin.i18n.settingS3PasteUploadDesc || "开启后可作为图床使用，粘贴文件自动上传到 S3 并替换链接（需要 S3 仓库公共访问权限）",
+            createActionElement: () => s3PasteUploadCheckbox,
+        });
+
+        // S3 端点
         // S3 端点
         setting.addItem({
             title: this.plugin.i18n.settingS3Endpoint || "S3 端点地址",
