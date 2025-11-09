@@ -418,7 +418,7 @@ function ShareView() {
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw, rehypeHighlight, rehypeSlug]}
                 components={{
-                  img: ({ node, src, alt, title, ...props }) => {
+                  img: ({ src, alt }) => {
                     return (
                       <Image
                         src={src}

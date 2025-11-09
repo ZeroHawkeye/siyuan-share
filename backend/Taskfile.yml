@@ -1,182 +1,50 @@
-version: '3'
-
-vars:
-  WEB_DIR: web
-  API_DIR: api
-  DIST_DIR: '{{.WEB_DIR}}/dist'
-  BINARY_NAME: siyuan-share-api
-  BINARY_NAME_WIN: '{{.BINARY_NAME}}.exe'
-
+version: "3"
 tasks:
-  # 前端任务
-  web:install:
-    desc: 安装前端依赖
-    dir: '{{.WEB_DIR}}'
+  build:web:
     cmds:
-      - npm install
-
-  web:dev:
-    desc: 启动前端开发服务器
-    dir: '{{.WEB_DIR}}'
-    cmds:
-      - npm run dev
-
-  web:build:
-    desc: 构建前端生产版本
-    dir: '{{.WEB_DIR}}'
-    cmds:
+      - cd web
       - npm run build
-    sources:
-      - '{{.WEB_DIR}}/src/**/*'
-      - '{{.WEB_DIR}}/index.html'
-      - '{{.WEB_DIR}}/vite.config.ts'
-      - '{{.WEB_DIR}}/package.json'
-    generates:
-      - '{{.DIST_DIR}}/index.html'
-
-  web:preview:
-    desc: 预览前端构建结果
-    dir: '{{.WEB_DIR}}'
+    desc: "前端编译"
+  copy:web:
     cmds:
-      - npm run preview
-
-  web:clean:
-    desc: 清理前端构建产物
+      # 先删除api目录下的dist目录
+      - powershell -Command "if (Test-Path 'api/dist') { Remove-Item -Path 'api/dist' -Recurse -Force }"
+      # powershell命令复制文件夹
+      - powershell -Command "Copy-Item -Path 'web/dist' -Destination 'api' -Recurse -Force"
+    desc: "复制前端静态文件到后端"
+  build:linux:
+    # 执行目录
+    dir: api
+    env:
+      GOOS: linux
     cmds:
-      - cmd: powershell -NoProfile -Command "if (Test-Path '{{.DIST_DIR}}') { Remove-Item -Recurse -Force '{{.DIST_DIR}}' }"
-        platforms: [windows]
-      - cmd: rm -rf {{.DIST_DIR}}
-        platforms: [linux, darwin]
-
-  # 后端任务
-  api:deps:
-    desc: 下载后端依赖
-    dir: '{{.API_DIR}}'
+      - task: build:web
+      - task: copy:web
+      - go build -o siyuan-share .
+    desc: "编译linux后端"
+  build:windows:
+    # 执行目录
+    dir: api
+    env:
+      GOOS: windows
     cmds:
-      - go mod download
-
-  api:copy-web:
-    desc: 复制前端构建文件到后端目录
-    deps:
-      - web:build
+      - task: build:web
+      - task: copy:web
+      - go build -o siyuan-share.exe .
+    desc: "编译windows后端"
+  build:all:
+    # 执行目录
+    dir: api
+    env:
+      GOOS: windows
     cmds:
-      - cmd: powershell -NoProfile -Command "if (Test-Path '{{.API_DIR}}/dist') { Remove-Item -Recurse -Force '{{.API_DIR}}/dist' }; Copy-Item -Recurse -Force '{{.DIST_DIR}}' '{{.API_DIR}}/dist'"
-        platforms: [windows]
-      - cmd: |
-          rm -rf {{.API_DIR}}/dist
-          cp -r {{.DIST_DIR}} {{.API_DIR}}/dist
-        platforms: [linux, darwin]
-
-  api:dev:
-    desc: 启动后端开发服务器
-    dir: '{{.API_DIR}}'
-    cmds:
-      - go run .
-
-  api:build:
-    desc: 构建后端可执行文件（需要先构建前端）
-    dir: '{{.API_DIR}}'
-    deps:
-      - api:copy-web
-    cmds:
-      - cmd: go build -ldflags="-s -w" -o {{.BINARY_NAME_WIN}}
-        platforms: [windows]
-      - cmd: go build -ldflags="-s -w" -o {{.BINARY_NAME}}
-        platforms: [linux, darwin]
-    sources:
-      - '{{.API_DIR}}/**/*.go'
-      - '{{.API_DIR}}/dist/**/*'
-
-  api:run:
-    desc: 运行后端可执行文件
-    dir: '{{.API_DIR}}'
-    cmds:
-      - cmd: .\{{.BINARY_NAME_WIN}}
-        platforms: [windows]
-      - cmd: ./{{.BINARY_NAME}}
-        platforms: [linux, darwin]
-
-  api:clean:
-    desc: 清理后端构建产物
-    dir: '{{.API_DIR}}'
-    cmds:
-      - cmd: powershell -NoProfile -Command "if (Test-Path '{{.BINARY_NAME_WIN}}') { Remove-Item -Force '{{.BINARY_NAME_WIN}}' }; if (Test-Path 'data') { Remove-Item -Recurse -Force 'data' }; if (Test-Path 'dist') { Remove-Item -Recurse -Force 'dist' }"
-        platforms: [windows]
-      - cmd: |
-          rm -f {{.BINARY_NAME}}
-          rm -rf data
-          rm -rf dist
-        platforms: [linux, darwin]
-
-  # 综合任务
-  install:
-    desc: 安装所有依赖
-    cmds:
-      - task: web:install
-      - task: api:deps
-
-  dev:
-    desc: 启动完整开发环境（前后端）
-    cmds:
-      - task: api:dev
-      - task: web:dev
-
-  build:
-    desc: 构建完整应用（前端+后端嵌入）
-    cmds:
-      - echo "开始构建完整应用..."
-      - task: web:build
-      - echo "前端构建完成，开始构建后端..."
-      - task: api:build
-      - echo "构建完成！"
-
-  clean:
-    desc: 清理所有构建产物
-    cmds:
-      - task: web:clean
-      - task: api:clean
-
-  run:
-    desc: 构建并运行应用
-    cmds:
-      - task: build
-      - task: api:run
-
-  # 开发辅助
-  fmt:
-    desc: 格式化代码
-    cmds:
-      - cmd: cd {{.API_DIR}} && go fmt ./...
-      - cmd: cd {{.WEB_DIR}} && npm run lint --fix
-        ignore_error: true
-
-  test:
-    desc: 运行测试
-    dir: '{{.API_DIR}}'
-    cmds:
-      - go test ./... -v
-
-  # 数据库管理
-  db:reset:
-    desc: 重置数据库（删除所有数据）
-    dir: '{{.API_DIR}}'
-    prompt: 确定要重置数据库吗？所有数据将被删除。
-    cmds:
-      - cmd: powershell -NoProfile -Command "if (Test-Path 'data/siyuan-share.db') { Remove-Item -Force 'data/siyuan-share.db' }"
-        platforms: [windows]
-      - cmd: rm -f data/siyuan-share.db
-        platforms: [linux, darwin]
-      - echo "数据库已重置"
-
-  # 生产部署
-  release:
-    desc: 构建发布版本（优化编译）
-    cmds:
-      - task: web:build
-      - cmd: cd {{.API_DIR}} && go build -ldflags="-s -w -X main.Version={{.VERSION}}" -o {{.BINARY_NAME_WIN}}
-        platforms: [windows]
-      - cmd: cd {{.API_DIR}} && go build -ldflags="-s -w -X main.Version={{.VERSION}}" -o {{.BINARY_NAME}}
-        platforms: [linux, darwin]
-    vars:
-      VERSION:
-        sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+      - task: build:web
+      - task: copy:web
+      - task: build:linux
+      - task: build:windows
+      # 创建build目录（如果不存在）
+      - powershell -Command "if (-not (Test-Path '../build')) { New-Item -Path '../build' -ItemType Directory -Force }"
+      # 移动编译产物到build目录
+      - powershell -Command "Move-Item -Path 'siyuan-share' -Destination '../build/siyuan-share' -Force"
+      - powershell -Command "Move-Item -Path 'siyuan-share.exe' -Destination '../build/siyuan-share.exe' -Force"
+    desc: "编译所有内容"

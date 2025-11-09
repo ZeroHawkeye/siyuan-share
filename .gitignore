@@ -6,4 +6,6 @@ dist
 package.zip
 index.css
 index.js
-/i18n
+backend/.task
+backend/build
+i18n/
