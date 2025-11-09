@@ -7,8 +7,8 @@
     "lint": "eslint . --fix --cache",
     "link": "node scripts/link-plugin.js",
     "unlink": "node scripts/unlink-plugin.js",
-    "dev": "npm run link && webpack --mode development --watch",
-    "dev:once": "npm run link && webpack --mode development",
+    "dev": "node scripts/link-plugin.js --with-webpack --watch",
+    "dev:once": "node scripts/link-plugin.js --with-webpack",
     "build": "webpack --mode production",
     "convert:icons": "node scripts/convert-svg-to-png.js"
   },
@@ -28,6 +28,7 @@
     "sass-loader": "^12.6.0",
     "sharp": "^0.34.5",
     "siyuan": "1.1.3",
+    "chokidar": "^3.6.0",
     "tslib": "2.4.0",
     "typescript": "4.8.4",
     "webpack": "^5.76.0",
