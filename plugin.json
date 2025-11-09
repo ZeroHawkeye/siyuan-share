@@ -12,12 +12,12 @@
   ],
   "disabledInPublish": false,
   "displayName": {
-    "default": "Siyuan Share Plugin Sample",
-    "zh_CN": "思源在线分享"
+    "default": "Siyuan Share",
+    "zh_CN": "思源分享"
   },
   "description": {
-    "default": "Share content from Siyuan Notes to online platforms",
-    "zh_CN": "将思源笔记中的内容分享到在线平台"
+    "default": "Publish selected SiYuan documents or blocks to a public URL for quick viewing and collaboration.",
+    "zh_CN": "将选择的思源笔记文档或块发布为公网可访问链接，便于快速查看与协作。"
   },
   "readme": {
     "default": "README.md",
