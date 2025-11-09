@@ -1,0 +1,193 @@
+<svg width="1024" height="768" viewBox="0 0 1024 768" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <defs>
+    <linearGradient id="preview-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F8F9FA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#E9ECEF;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="card-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F8F9FA;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="primary-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A90E2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#357ABD;stop-opacity:1" />
+    </linearGradient>
+    <filter id="card-shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.1"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect width="1024" height="768" fill="url(#preview-bg)"/>
+  
+  <!-- 标题区域 -->
+  <text x="512" y="80" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#2C3E50" text-anchor="middle">
+    思源在线分享
+  </text>
+  <text x="512" y="120" font-family="Arial, sans-serif" font-size="24" fill="#7F8C8D" text-anchor="middle">
+    Siyuan Share Plugin - 将思源笔记分享到互联网
+  </text>
+  
+  <!-- 主插画区域 -->
+  <g transform="translate(200, 180)">
+    <!-- 左侧：思源笔记 -->
+    <g filter="url(#card-shadow)">
+      <rect x="0" y="0" width="250" height="350" rx="12" fill="url(#card-gradient)"/>
+      <rect x="0" y="0" width="250" height="50" rx="12" fill="url(#primary-gradient)"/>
+      <rect x="0" y="50" width="250" height="12" fill="url(#primary-gradient)" opacity="0.3"/>
+      
+      <!-- 笔记图标 -->
+      <text x="125" y="35" font-family="Arial, sans-serif" font-size="20" fill="#FFFFFF" text-anchor="middle" font-weight="bold">
+        📝 我的笔记
+      </text>
+      
+      <!-- 笔记内容模拟 -->
+      <g transform="translate(20, 80)">
+        <rect x="0" y="0" width="210" height="12" rx="4" fill="#4A90E2" opacity="0.3"/>
+        <rect x="0" y="25" width="180" height="12" rx="4" fill="#4A90E2" opacity="0.2"/>
+        <rect x="0" y="50" width="200" height="12" rx="4" fill="#4A90E2" opacity="0.2"/>
+        <rect x="0" y="75" width="160" height="12" rx="4" fill="#4A90E2" opacity="0.2"/>
+        
+        <!-- 图片占位符 -->
+        <rect x="0" y="105" width="210" height="120" rx="8" fill="#E9ECEF"/>
+        <text x="105" y="170" font-family="Arial, sans-serif" font-size="16" fill="#ADB5BD" text-anchor="middle">
+          🖼️ 图片
+        </text>
+        
+        <rect x="0" y="240" width="190" height="12" rx="4" fill="#4A90E2" opacity="0.2"/>
+        <rect x="0" y="265" width="170" height="12" rx="4" fill="#4A90E2" opacity="0.2"/>
+      </g>
+    </g>
+    
+    <!-- 中间：分享动画箭头 -->
+    <g transform="translate(280, 145)" filter="url(#glow)">
+      <!-- 曲线箭头 -->
+      <path d="M 0 30 Q 60 30 80 30" fill="none" stroke="url(#primary-gradient)" stroke-width="6" stroke-linecap="round"/>
+      <path d="M 80 30 Q 100 30 120 30" fill="none" stroke="url(#primary-gradient)" stroke-width="6" stroke-linecap="round" stroke-dasharray="8,4">
+        <animate attributeName="stroke-dashoffset" from="0" to="-12" dur="1s" repeatCount="indefinite"/>
+      </path>
+      <polygon points="120,30 105,20 105,40" fill="url(#primary-gradient)"/>
+      
+      <!-- 分享图标 -->
+      <g transform="translate(50, -15)">
+        <circle cx="0" cy="0" r="10" fill="#FFD700"/>
+        <circle cx="20" cy="-15" r="7" fill="#FFA500"/>
+        <circle cx="20" cy="15" r="7" fill="#FFA500"/>
+        <line x1="8" y1="-5" x2="14" y2="-11" stroke="#FFFFFF" stroke-width="2"/>
+        <line x1="8" y1="5" x2="14" y2="11" stroke="#FFFFFF" stroke-width="2"/>
+      </g>
+      
+      <!-- 云朵装饰 -->
+      <g transform="translate(60, 60)">
+        <ellipse cx="0" cy="0" rx="15" ry="10" fill="#4A90E2" opacity="0.2"/>
+        <ellipse cx="15" cy="-5" rx="12" ry="8" fill="#4A90E2" opacity="0.2"/>
+        <ellipse cx="25" cy="0" rx="10" ry="7" fill="#4A90E2" opacity="0.2"/>
+      </g>
+    </g>
+    
+    <!-- 右侧：在线展示 -->
+    <g transform="translate(374, 0)" filter="url(#card-shadow)">
+      <rect x="0" y="0" width="250" height="350" rx="12" fill="url(#card-gradient)"/>
+      
+      <!-- 浏览器标签栏 -->
+      <rect x="0" y="0" width="250" height="40" rx="12" fill="#2C3E50"/>
+      <rect x="0" y="40" width="250" height="12" fill="#2C3E50" opacity="0.2"/>
+      
+      <!-- 地址栏 -->
+      <rect x="15" y="12" width="180" height="16" rx="8" fill="#FFFFFF" opacity="0.9"/>
+      <text x="25" y="24" font-family="monospace" font-size="10" fill="#7F8C8D">
+        🌐 https://share.example.com/...
+      </text>
+      
+      <!-- 分享按钮图标 -->
+      <circle cx="220" cy="20" r="8" fill="#28A745"/>
+      <text x="220" y="24" font-family="Arial, sans-serif" font-size="10" fill="#FFFFFF" text-anchor="middle" font-weight="bold">
+        ✓
+      </text>
+      
+      <!-- 在线内容 -->
+      <g transform="translate(20, 70)">
+        <text x="0" y="0" font-family="Arial, sans-serif" font-size="18" fill="#2C3E50" font-weight="bold">
+          分享的笔记
+        </text>
+        
+        <rect x="0" y="15" width="210" height="10" rx="4" fill="#28A745" opacity="0.3"/>
+        <rect x="0" y="35" width="180" height="10" rx="4" fill="#6C757D" opacity="0.2"/>
+        <rect x="0" y="55" width="200" height="10" rx="4" fill="#6C757D" opacity="0.2"/>
+        <rect x="0" y="75" width="160" height="10" rx="4" fill="#6C757D" opacity="0.2"/>
+        
+        <!-- 图片已上传 -->
+        <rect x="0" y="100" width="210" height="120" rx="8" fill="#D4EDDA"/>
+        <text x="105" y="165" font-family="Arial, sans-serif" font-size="14" fill="#28A745" text-anchor="middle">
+          ✓ 图片已发布
+        </text>
+        
+        <rect x="0" y="235" width="190" height="10" rx="4" fill="#6C757D" opacity="0.2"/>
+      </g>
+    </g>
+  </g>
+  
+  <!-- 底部功能特性 -->
+  <g transform="translate(120, 580)">
+    <!-- 特性1 -->
+    <g>
+      <circle cx="30" cy="30" r="25" fill="url(#primary-gradient)" opacity="0.2"/>
+      <text x="30" y="40" font-size="30" text-anchor="middle">🚀</text>
+      <text x="30" y="80" font-family="Arial, sans-serif" font-size="16" fill="#2C3E50" text-anchor="middle" font-weight="bold">
+        快速分享
+      </text>
+      <text x="30" y="100" font-family="Arial, sans-serif" font-size="12" fill="#7F8C8D" text-anchor="middle">
+        一键发布到网络
+      </text>
+    </g>
+    
+    <!-- 特性2 -->
+    <g transform="translate(250, 0)">
+      <circle cx="30" cy="30" r="25" fill="url(#primary-gradient)" opacity="0.2"/>
+      <text x="30" y="40" font-size="30" text-anchor="middle">📦</text>
+      <text x="30" y="80" font-family="Arial, sans-serif" font-size="16" fill="#2C3E50" text-anchor="middle" font-weight="bold">
+        资源管理
+      </text>
+      <text x="30" y="100" font-family="Arial, sans-serif" font-size="12" fill="#7F8C8D" text-anchor="middle">
+        自动上传图片附件
+      </text>
+    </g>
+    
+    <!-- 特性3 -->
+    <g transform="translate(500, 0)">
+      <circle cx="30" cy="30" r="25" fill="url(#primary-gradient)" opacity="0.2"/>
+      <text x="30" y="40" font-size="30" text-anchor="middle">🔗</text>
+      <text x="30" y="80" font-family="Arial, sans-serif" font-size="16" fill="#2C3E50" text-anchor="middle" font-weight="bold">
+        引用支持
+      </text>
+      <text x="30" y="100" font-family="Arial, sans-serif" font-size="12" fill="#7F8C8D" text-anchor="middle">
+        保留块引用关系
+      </text>
+    </g>
+    
+    <!-- 特性4 -->
+    <g transform="translate(750, 0)">
+      <circle cx="30" cy="30" r="25" fill="url(#primary-gradient)" opacity="0.2"/>
+      <text x="30" y="40" font-size="30" text-anchor="middle">⚡</text>
+      <text x="30" y="80" font-family="Arial, sans-serif" font-size="16" fill="#2C3E50" text-anchor="middle" font-weight="bold">
+        增量更新
+      </text>
+      <text x="30" y="100" font-family="Arial, sans-serif" font-size="12" fill="#7F8C8D" text-anchor="middle">
+        智能检测变更
+      </text>
+    </g>
+  </g>
+  
+  <!-- 底部版本信息 -->
+  <text x="512" y="740" font-family="Arial, sans-serif" font-size="14" fill="#ADB5BD" text-anchor="middle">
+    Made with ❤️ for SiYuan Note Community
+  </text>
+</svg>

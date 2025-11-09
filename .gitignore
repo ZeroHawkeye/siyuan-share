@@ -9,3 +9,4 @@ index.js
 backend/.task
 backend/build
 i18n/
+.env
